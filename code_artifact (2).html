@@ -1,0 +1,3145 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Синхронний Розклад для Двох</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    * {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      background-color: #06181a;
+      color: #f4fbfa;
+      overflow-x: hidden;
+    }
+    .glass-card {
+      background: rgba(8, 28, 31, 0.72);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      box-shadow: 0 18px 45px rgba(0, 0, 0, 0.35);
+    }
+    .tiffany-pink-btn {
+      background: linear-gradient(135deg, #f472b6 0%, #5eead4 100%);
+      color: #06181a;
+      font-weight: 800;
+    }
+    .tiffany-pink-btn:hover {
+      filter: brightness(1.06);
+    }
+    /* Кастомний скролбар */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.04);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(94, 234, 212, 0.35);
+      border-radius: 9999px;
+    }
+  </style>
+</head>
+<body class="min-h-screen relative selection:bg-teal-300 selection:text-slate-950">
+  <!-- Повноцінний панорамний фон з динамічною добою, фазами Місяця та нічними світлячками -->
+  <canvas id="panoramicCanvas" class="fixed inset-0 w-full h-full pointer-events-none z-0"></canvas>
+
+  <!-- Початковий екран створення / приєднання до кімнати -->
+  <div id="onboardingOverlay" class="relative z-10 min-h-screen flex items-center justify-center p-4 sm:p-6">
+    <div class="glass-card w-full max-w-xl rounded-3xl p-5 sm:p-7 space-y-5">
+      <div class="flex items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
+          <div class="w-11 h-11 rounded-2xl tiffany-pink-btn flex items-center justify-center text-xl shadow-lg">
+            ⏳
+          </div>
+          <div>
+            <h1 id="obTitle" class="text-lg sm:text-xl font-extrabold tracking-tight text-white">Синхронний Розклад для Двох</h1>
+            <p id="obSubtitle" class="text-xs text-teal-200/80">Спільний час та розклад у різних часових поясах</p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <span id="obLiveClock" class="hidden sm:inline-block px-2.5 py-1 rounded-xl bg-white/10 text-xs font-bold tabular-nums text-teal-200"></span>
+          <button
+            type="button"
+            id="obLangSwitchBtn"
+            onclick="openLangModal()"
+            class="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-xs font-bold text-white transition"
+          >
+            🌐 UA
+          </button>
+        </div>
+      </div>
+
+      <!-- Вкладки створення / приєднання -->
+      <div class="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-black/30 border border-white/10">
+        <button
+          type="button"
+          id="tabCreateBtn"
+          onclick="setOnboardingMode('create')"
+          class="py-2.5 px-3 rounded-xl text-xs sm:text-sm font-extrabold transition tiffany-pink-btn"
+        >
+          ✨ Створити кімнату (К1)
+        </button>
+        <button
+          type="button"
+          id="tabJoinBtn"
+          onclick="setOnboardingMode('join')"
+          class="py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold text-white/80 hover:text-white transition"
+        >
+          🤝 Приєднатися (К2)
+        </button>
+      </div>
+
+      <!-- Поле коду кімнати при приєднанні -->
+      <div id="joinRoomCodeBox" class="hidden space-y-1.5">
+        <label id="obCodeLabel" for="obRoomCodeInput" class="block text-xs font-bold text-teal-200 uppercase tracking-wider">
+          Код кімнати (10 символів)
+        </label>
+        <input
+          type="text"
+          id="obRoomCodeInput"
+          maxlength="10"
+          placeholder="НАПРИКЛАД: 8K4M2P9X1Q"
+          oninput="this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '')"
+          class="w-full px-4 py-3 rounded-2xl bg-white/10 border border-white/15 text-sm font-extrabold tracking-widest uppercase text-white placeholder-white/40 focus:outline-none focus:border-teal-300"
+        />
+      </div>
+
+      <!-- Профіль користувача -->
+      <div class="grid grid-cols-1 sm:grid-cols-[auto_1fr] gap-4 items-center">
+        <label class="cursor-pointer group relative w-16 h-16 rounded-2xl bg-white/10 border border-dashed border-white/30 flex items-center justify-center overflow-hidden mx-auto sm:mx-0">
+          <div id="obAvatarPreview" class="w-full h-full flex items-center justify-center text-2xl">📷</div>
+          <input type="file" accept="image/*" onchange="handleOnboardingAvatar(event)" class="hidden" />
+        </label>
+
+        <div class="space-y-2.5">
+          <div>
+            <label id="obNameLabel" for="obNameInput" class="block text-xs font-bold text-teal-200 mb-1">Ваше ім'я</label>
+            <input
+              type="text"
+              id="obNameInput"
+              placeholder="Введіть ваше ім'я..."
+              class="w-full px-4 py-2.5 rounded-2xl bg-white/10 border border-white/15 text-sm text-white placeholder-white/40 focus:outline-none focus:border-teal-300"
+            />
+          </div>
+
+          <div>
+            <label id="obCountryLabel" for="obCountrySelect" class="block text-xs font-bold text-teal-200 mb-1">Країна / Часовий пояс</label>
+            <select
+              id="obCountrySelect"
+              class="w-full px-3.5 py-2.5 rounded-2xl bg-[#0b272a] border border-white/15 text-sm text-white focus:outline-none focus:border-teal-300"
+            ></select>
+          </div>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        id="obSubmitBtn"
+        onclick="submitOnboarding()"
+        class="w-full py-3.5 rounded-2xl text-sm font-extrabold tiffany-pink-btn shadow-lg transition"
+      >
+        🚀 Відкрити розклад
+      </button>
+    </div>
+  </div>
+
+  <!-- Головний інтерфейс розкладу -->
+  <div id="mainAppContainer" class="hidden relative z-10 max-w-6xl mx-auto p-3 sm:p-6 space-y-4 sm:space-y-6">
+    <!-- Шапка -->
+    <header class="glass-card rounded-3xl p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3 min-w-0">
+        <div class="w-11 h-11 rounded-2xl tiffany-pink-btn flex items-center justify-center text-xl shrink-0">
+          ⏳
+        </div>
+        <div class="min-w-0">
+          <h1 id="appMainTitle" class="text-base sm:text-xl font-extrabold text-white truncate">Синхронний Розклад для Двох</h1>
+          <div class="flex flex-wrap items-center gap-2 text-xs text-teal-200/85 mt-0.5">
+            <span id="roomStatusBadge">Кімната активна</span>
+            <span>•</span>
+            <span class="font-mono font-bold text-white" id="headerRoomCode">----------</span>
+            <span>•</span>
+            <span id="syncStatusLabel" class="text-emerald-300 font-semibold">● Синхронно</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onclick="openRoomModal()"
+          class="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-xs font-bold text-white transition"
+        >
+          🔑 <span id="codeBtnLabel">Код</span>
+        </button>
+        <button
+          type="button"
+          onclick="copyShareLink()"
+          class="px-3.5 py-2 rounded-xl tiffany-pink-btn text-xs font-extrabold transition"
+        >
+          🔗 <span id="linkBtnLabel">Посилання</span>
+        </button>
+        <button
+          type="button"
+          id="langSwitchBtn"
+          onclick="openLangModal()"
+          class="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-xs font-bold text-white transition"
+        >
+          🌐 UA
+        </button>
+        <button
+          type="button"
+          onclick="leaveCurrentRoom()"
+          title="Вийти з кімнати"
+          class="px-3 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-400/30 text-xs font-bold text-rose-200 transition"
+        >
+          🚪
+        </button>
+      </div>
+    </header>
+
+    <!-- Картки двох учасників (К1 та К2) -->
+    <section class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <!-- Учасник 1 -->
+      <div class="glass-card rounded-3xl p-4 sm:p-5 space-y-3">
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex items-center gap-3 min-w-0">
+            <label class="cursor-pointer w-12 h-12 rounded-2xl bg-white/10 border border-white/15 flex items-center justify-center overflow-hidden shrink-0">
+              <div id="u1AvatarBox" class="w-full h-full flex items-center justify-center">👤</div>
+              <input type="file" accept="image/*" onchange="handleMemberAvatar(1, event)" class="hidden" />
+            </label>
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded-lg bg-pink-400/25 text-pink-200 text-[11px] font-extrabold">К1</span>
+                <input
+                  type="text"
+                  id="u1NameInput"
+                  placeholder="Ім'я К1..."
+                  onchange="updateMemberName(1, this.value)"
+                  class="bg-transparent font-extrabold text-sm sm:text-base text-white focus:outline-none focus:underline w-full truncate"
+                />
+              </div>
+              <div class="flex flex-wrap items-center gap-1.5 text-xs text-teal-100/80 mt-1">
+                <span id="u1Flag">🇺🇦</span>
+                <span id="u1CountryText" class="truncate">Україна</span>
+                <span id="u1DayOffset" class="text-teal-300 font-semibold"></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="text-right shrink-0">
+            <div id="u1LiveTime" class="text-base sm:text-lg font-black tabular-nums text-white">--:--:--</div>
+            <div id="u1DiffBadge" class="text-[11px] font-bold text-teal-300">UTC+2</div>
+          </div>
+        </div>
+
+        <div>
+          <select
+            id="u1CountrySelect"
+            onchange="updateMemberCountry(1, this.value)"
+            class="w-full px-3 py-2 rounded-xl bg-[#0b272a] border border-white/10 text-xs text-white focus:outline-none focus:border-teal-300"
+          ></select>
+        </div>
+      </div>
+
+      <!-- Учасник 2 -->
+      <div class="glass-card rounded-3xl p-4 sm:p-5 space-y-3 relative">
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex items-center gap-3 min-w-0">
+            <label class="cursor-pointer w-12 h-12 rounded-2xl bg-white/10 border border-white/15 flex items-center justify-center overflow-hidden shrink-0">
+              <div id="u2AvatarBox" class="w-full h-full flex items-center justify-center">👤</div>
+              <input type="file" accept="image/*" onchange="handleMemberAvatar(2, event)" class="hidden" />
+            </label>
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded-lg bg-teal-300/25 text-teal-200 text-[11px] font-extrabold">К2</span>
+                <input
+                  type="text"
+                  id="u2NameInput"
+                  placeholder="Ім'я К2..."
+                  onchange="updateMemberName(2, this.value)"
+                  class="bg-transparent font-extrabold text-sm sm:text-base text-white focus:outline-none focus:underline w-full truncate"
+                />
+              </div>
+              <div class="flex flex-wrap items-center gap-1.5 text-xs text-teal-100/80 mt-1">
+                <span id="u2Flag">🇺🇸</span>
+                <span id="u2CountryText" class="truncate">США</span>
+                <span id="u2DayOffset" class="text-teal-300 font-semibold"></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="text-right shrink-0">
+            <div id="u2LiveTime" class="text-base sm:text-lg font-black tabular-nums text-white">--:--:--</div>
+            <div id="u2DiffBadge" class="text-[11px] font-bold text-pink-300">+0 год</div>
+          </div>
+        </div>
+
+        <div>
+          <select
+            id="u2CountrySelect"
+            onchange="updateMemberCountry(2, this.value)"
+            class="w-full px-3 py-2 rounded-xl bg-[#0b272a] border border-white/10 text-xs text-white focus:outline-none focus:border-teal-300"
+          ></select>
+        </div>
+
+        <div id="u2WaitingBanner" class="px-3 py-2 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-between gap-2 text-xs text-teal-100/85">
+          <span id="u2WaitingText">⏳ Очікуємо приєднання К2 за кодом кімнати</span>
+          <button type="button" id="u2WaitingCopyBtn" onclick="copyRoomCode()" class="px-2.5 py-1 rounded-lg bg-teal-300/20 hover:bg-teal-300/30 text-teal-200 font-bold shrink-0">
+            Копіювати код
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Навігація по тижнях та днях -->
+    <section class="glass-card rounded-3xl p-4 sm:p-5 space-y-4">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-2">
+          <button
+            type="button"
+            id="currWeekBtn"
+            onclick="setWeekOffset(0)"
+            class="px-4 py-2 rounded-xl text-xs font-extrabold tiffany-pink-btn transition"
+          >
+            Поточний тиждень
+          </button>
+          <button
+            type="button"
+            id="nextWeekBtn"
+            onclick="setWeekOffset(1)"
+            class="px-4 py-2 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/15 text-white transition"
+          >
+            Наступний тиждень
+          </button>
+        </div>
+
+        <div class="flex items-center gap-3 text-xs sm:text-sm font-bold text-teal-100">
+          <span id="weekRangeLabel">---</span>
+          <span id="selectedDateMoonBadge" class="px-2.5 py-1 rounded-xl bg-white/10 text-xs font-semibold">🌙</span>
+        </div>
+      </div>
+
+      <div id="weekDaysGrid" class="grid grid-cols-7 gap-1.5 sm:gap-2.5"></div>
+    </section>
+
+    <!-- Форма додавання заняття з початком, кінцем та перевіркою годин -->
+    <section class="glass-card rounded-3xl p-4 sm:p-5 space-y-2.5">
+      <form onsubmit="handleAddTask(event)" class="grid grid-cols-1 lg:grid-cols-[auto_1fr_auto] gap-3 items-center">
+        <button
+          type="button"
+          id="taskOwnerToggleBtn"
+          onclick="toggleTaskOwner()"
+          class="px-4 py-3 rounded-2xl text-xs sm:text-sm font-extrabold text-slate-950 bg-pink-300 hover:brightness-105 transition shrink-0"
+        >
+          К1
+        </button>
+
+        <div class="grid grid-cols-1 sm:grid-cols-[auto_auto_1fr_auto] gap-2.5 items-center">
+          <div class="flex items-center gap-1.5 bg-white/10 border border-white/15 rounded-2xl px-3 py-2">
+            <span id="taskStartLabel" class="text-[11px] font-bold text-teal-200 uppercase">Початок</span>
+            <input
+              type="text"
+              id="taskStartTimeInput"
+              value="18:00"
+              maxlength="5"
+              inputmode="numeric"
+              placeholder="18:00"
+              oninput="formatAndValidateTimeInputs()"
+              required
+              class="w-14 bg-transparent text-sm font-extrabold tabular-nums text-white placeholder-white/40 focus:outline-none"
+            />
+            <span class="text-white/45 font-bold">–</span>
+            <span id="taskEndLabel" class="text-[11px] font-bold text-pink-200 uppercase">Кінець</span>
+            <input
+              type="text"
+              id="taskEndTimeInput"
+              value="19:30"
+              maxlength="5"
+              inputmode="numeric"
+              placeholder="19:30"
+              oninput="formatAndValidateTimeInputs()"
+              required
+              class="w-14 bg-transparent text-sm font-extrabold tabular-nums text-white placeholder-white/40 focus:outline-none"
+            />
+          </div>
+
+          <select
+            id="taskCategorySelect"
+            class="px-3.5 py-3 rounded-2xl bg-[#0b272a] border border-white/15 text-sm font-semibold text-white focus:outline-none focus:border-teal-300"
+          >
+            <option value="call">📞 Дзвінок</option>
+            <option value="video">🎥 Відеочат</option>
+            <option value="date">💖 Побачення</option>
+            <option value="study">📚 Навчання</option>
+            <option value="work">💼 Робота / Справи</option>
+            <option value="sport">🏋️ Тренування</option>
+            <option value="game">🎮 Гра / Фільм</option>
+            <option value="travel">✈️ Подорож</option>
+            <option value="food">🍽️ Вечеря / Кава</option>
+            <option value="rest">🌿 Відпочинок</option>
+            <option value="sleep">🌙 Сон</option>
+          </select>
+
+          <input
+            type="text"
+            id="taskTitleInput"
+            placeholder="Назва заняття або зустрічі..."
+            required
+            class="px-4 py-3 rounded-2xl bg-white/10 border border-white/15 text-sm text-white placeholder-white/45 focus:outline-none focus:border-teal-300"
+          />
+
+          <div id="taskTimePreviewBadge" class="px-3 py-2.5 rounded-2xl bg-teal-400/15 border border-teal-300/25 text-xs font-semibold text-teal-100 whitespace-nowrap">
+            ⏱ 1 год 30 хв
+          </div>
+        </div>
+
+        <button
+          type="submit"
+          class="px-5 py-3 rounded-2xl text-sm font-extrabold tiffany-pink-btn shrink-0"
+        >
+          + <span id="addTaskBtnLabel">Додати</span>
+        </button>
+      </form>
+      <div id="taskTimeValidationHint" class="text-xs text-rose-300 hidden px-1"></div>
+    </section>
+
+    <!-- Синхронна шкала 00:00–24:00 -->
+    <section class="glass-card rounded-3xl p-4 sm:p-5 space-y-3">
+      <div class="grid grid-cols-[64px_1fr_1fr] gap-2 sm:gap-3 pb-2 border-b border-white/10 text-xs font-extrabold uppercase tracking-wider text-teal-200">
+        <div id="colTimeHeader">Час</div>
+        <div id="colHeader1" class="text-pink-200 truncate">К1</div>
+        <div id="colHeader2" class="text-teal-200 truncate">К2</div>
+      </div>
+
+      <div id="syncTimelineRows" class="divide-y divide-white/5 max-h-[620px] overflow-y-auto pr-1"></div>
+    </section>
+  </div>
+
+  <!-- Модальне вікно коду кімнати -->
+  <div id="roomModal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="glass-card w-full max-w-md rounded-3xl p-6 space-y-4">
+      <div class="flex items-center justify-between">
+        <h2 id="modalRoomTitle" class="text-base font-extrabold text-white">Код кімнати</h2>
+        <button type="button" onclick="closeRoomModal()" class="text-white/70 hover:text-white text-lg">✕</button>
+      </div>
+      <div class="p-4 rounded-2xl bg-black/35 border border-white/10 text-center space-y-2">
+        <div id="modalRoomHint" class="text-xs text-teal-200/80">Поділіться цим кодом або посиланням з іншим учасником</div>
+        <input
+          type="text"
+          id="modalRoomCodeDisplay"
+          readonly
+          onclick="this.select()"
+          value="----------"
+          class="w-full bg-transparent text-center text-2xl font-black tracking-widest font-mono text-teal-300 focus:outline-none select-all cursor-pointer"
+        />
+      </div>
+      <div class="grid grid-cols-2 gap-2.5">
+        <button type="button" id="modalCopyCodeBtn" onclick="copyRoomCode()" class="py-2.5 px-3 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-bold text-white">
+          📋 Копіювати код
+        </button>
+        <button type="button" id="modalCopyLinkBtn" onclick="copyShareLink()" class="py-2.5 px-3 rounded-xl tiffany-pink-btn text-xs font-extrabold">
+          🔗 Копіювати посилання
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модальне вікно вибору мови (95+ мов світу) -->
+  <div id="langModal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="glass-card w-full max-w-lg rounded-3xl p-5 sm:p-6 space-y-4">
+      <div class="flex items-center justify-between">
+        <h2 id="langModalTitle" class="text-base font-extrabold text-white">Вибір мови</h2>
+        <button type="button" onclick="closeLangModal()" class="text-white/70 hover:text-white text-lg">✕</button>
+      </div>
+      <input
+        type="text"
+        id="langSearchInput"
+        oninput="renderLangList(this.value)"
+        placeholder="Пошук мови..."
+        class="w-full px-4 py-2.5 rounded-2xl bg-white/10 border border-white/15 text-sm text-white placeholder-white/40 focus:outline-none focus:border-teal-300"
+      />
+      <div id="langListContainer" class="max-h-72 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-2 pr-1"></div>
+    </div>
+  </div>
+
+  <!-- Спливаюче сповіщення -->
+  <div id="toastBanner" class="hidden fixed bottom-5 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-2xl bg-[#082226] border border-teal-300/40 text-xs sm:text-sm font-bold text-white shadow-2xl"></div>
+
+  <script>
+    const STORAGE_KEY = 'sync_schedule_duo_v2';
+    const SESSION_KEY = 'sync_schedule_duo_session_v2';
+
+    let currentLang = 'uk';
+    let onboardingMode = 'create';
+    let onboardingAvatar = '';
+    let roomId = '';
+    let myRole = 1;
+    let lastAppliedRemoteUpdatedAt = 0;
+    let localEventSource = null;
+    let localPollTimer = null;
+    let toastTimeout = null;
+
+    const state = {
+      user1: { name: '', countryId: 'ua', avatar: '', joined: false },
+      user2: { name: '', countryId: 'cy', avatar: '', joined: false },
+      tasks: [],
+      weekOffset: 0,
+      selectedDayIndex: 0,
+      taskOwner: 1,
+      updatedAt: 0
+    };
+
+    function sanitizeRoomCode(raw) {
+      return String(raw || '')
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '')
+        .slice(0, 10);
+    }
+
+    function generateRoomCode() {
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let code = '';
+      for (let i = 0; i < 10; i++) {
+        code += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return code;
+    }
+
+    function isLocalServerMode() {
+      try {
+        const proto = String(window.location.protocol || '');
+        return proto === 'http:' || proto === 'https:';
+      } catch (e) {
+        return false;
+      }
+    }
+
+    function showToast(msg) {
+      const el = document.getElementById('toastBanner');
+      if (!el) return;
+      el.textContent = msg;
+      el.classList.remove('hidden');
+      clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => {
+        el.classList.add('hidden');
+      }, 2800);
+    }
+
+    async function copyTextReliable(text) {
+      const val = String(text || '').trim();
+      if (!val) return false;
+
+      // 1. Класичний надійний метод через тимчасове поле виділення
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = val;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.top = '0';
+        ta.style.left = '0';
+        ta.style.width = '2em';
+        ta.style.height = '2em';
+        ta.style.padding = '0';
+        ta.style.border = 'none';
+        ta.style.outline = 'none';
+        ta.style.boxShadow = 'none';
+        ta.style.background = 'transparent';
+        ta.style.opacity = '0.01';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        ta.setSelectionRange(0, val.length);
+        const execOk = document.execCommand('copy');
+        document.body.removeChild(ta);
+        if (execOk) return true;
+      } catch (e) {}
+
+      // 2. Сучасний Clipboard API
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(val);
+          return true;
+        }
+      } catch (e) {}
+
+      return false;
+    }
+
+    function buildShareUrl(code) {
+      const clean = sanitizeRoomCode(code);
+      try {
+        if (window.location.protocol === 'http:' || window.location.protocol === 'https:') {
+          const u = new URL(window.location.href);
+          if (clean) u.searchParams.set('room', clean);
+          return u.toString();
+        }
+      } catch (e) {}
+      return clean ? `?room=${encodeURIComponent(clean)}` : window.location.href;
+    }
+
+    function formatZonedTime(dateObj, tz) {
+      try {
+        return new Intl.DateTimeFormat(currentLang || 'uk', {
+          timeZone: tz,
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false
+        }).format(dateObj);
+      } catch (e) {
+        return dateObj.toTimeString().slice(0, 8);
+      }
+    }
+
+    function openRoomModal() {
+      const modal = document.getElementById('roomModal');
+      const disp = document.getElementById('modalRoomCodeDisplay');
+      if (disp) disp.value = roomId || '----------';
+      if (modal) modal.classList.remove('hidden');
+    }
+
+    function closeRoomModal() {
+      const modal = document.getElementById('roomModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    function openLangModal() {
+      const modal = document.getElementById('langModal');
+      const search = document.getElementById('langSearchInput');
+      if (search) search.value = '';
+      renderLangList('');
+      if (modal) modal.classList.remove('hidden');
+    }
+
+    function closeLangModal() {
+      const modal = document.getElementById('langModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    function renderLangList(filterQuery) {
+      const container = document.getElementById('langListContainer');
+      if (!container) return;
+      const q = String(filterQuery || '').trim().toLowerCase();
+      const filtered = SUPPORTED_LANGUAGES.filter(l =>
+        !q ||
+        l.label.toLowerCase().includes(q) ||
+        l.native.toLowerCase().includes(q) ||
+        l.code.toLowerCase().includes(q)
+      );
+
+      container.innerHTML = filtered.map(l => {
+        const active = l.code === currentLang;
+        return `
+          <button
+            type="button"
+            onclick="applyLanguage('${l.code}', true)"
+            class="px-3 py-2.5 rounded-2xl text-left transition border flex items-center justify-between gap-2 ${active ? 'tiffany-pink-btn border-transparent' : 'bg-white/5 hover:bg-white/10 border-white/10 text-white'}"
+          >
+            <div class="min-w-0">
+              <div class="text-xs font-extrabold truncate">${l.native}</div>
+              <div class="text-[11px] opacity-75 truncate">${l.label}</div>
+            </div>
+            <span class="text-[10px] font-mono uppercase opacity-80 shrink-0">${l.code}</span>
+          </button>
+        `;
+      }).join('');
+    }
+
+    const COUNTRIES_TZ = [
+      { id: 'ua', flag: '🇺🇦', name: 'Україна (Київ)', tz: 'Europe/Kyiv' },
+      { id: 'cy', flag: '🇨🇾', name: 'Кіпр (Нікосія)', tz: 'Asia/Nicosia' },
+      { id: 'us_ny', flag: '🇺🇸', name: 'США (Нью-Йорк)', tz: 'America/New_York' },
+      { id: 'us_la', flag: '🇺🇸', name: 'США (Лос-Анджелес)', tz: 'America/Los_Angeles' },
+      { id: 'ca_tr', flag: '🇨🇦', name: 'Канада (Торонто)', tz: 'America/Toronto' },
+      { id: 'gb', flag: '🇬🇧', name: 'Велика Британія (Лондон)', tz: 'Europe/London' },
+      { id: 'pl', flag: '🇵🇱', name: 'Польща (Варшава)', tz: 'Europe/Warsaw' },
+      { id: 'de', flag: '🇩🇪', name: 'Німеччина (Берлін)', tz: 'Europe/Berlin' },
+      { id: 'fr', flag: '🇫🇷', name: 'Франція (Париж)', tz: 'Europe/Paris' },
+      { id: 'it', flag: '🇮🇹', name: 'Італія (Рим)', tz: 'Europe/Rome' },
+      { id: 'es', flag: '🇪🇸', name: 'Іспанія (Мадрид)', tz: 'Europe/Madrid' },
+      { id: 'pt', flag: '🇵🇹', name: 'Португалія (Лісабон)', tz: 'Europe/Lisbon' },
+      { id: 'nl', flag: '🇳🇱', name: 'Нідерланди (Амстердам)', tz: 'Europe/Amsterdam' },
+      { id: 'se', flag: '🇸🇪', name: 'Швеція (Стокгольм)', tz: 'Europe/Stockholm' },
+      { id: 'no', flag: '🇳🇴', name: 'Норвегія (Осло)', tz: 'Europe/Oslo' },
+      { id: 'fi', flag: '🇫🇮', name: 'Фінляндія (Гельсінкі)', tz: 'Europe/Helsinki' },
+      { id: 'ro', flag: '🇷🇴', name: 'Румунія (Бухарест)', tz: 'Europe/Bucharest' },
+      { id: 'cz', flag: '🇨🇿', name: 'Чехія (Прага)', tz: 'Europe/Prague' },
+      { id: 'gr', flag: '🇬🇷', name: 'Греція (Афіни)', tz: 'Europe/Athens' },
+      { id: 'tr', flag: '🇹🇷', name: 'Туреччина (Стамбул)', tz: 'Europe/Istanbul' },
+      { id: 'ae', flag: '🇦🇪', name: 'ОАЕ (Дубай)', tz: 'Asia/Dubai' },
+      { id: 'il', flag: '🇮🇱', name: 'Ізраїль (Тель-Авів)', tz: 'Asia/Jerusalem' },
+      { id: 'jp', flag: '🇯🇵', name: 'Японія (Токіо)', tz: 'Asia/Tokyo' },
+      { id: 'kr', flag: '🇰🇷', name: 'Південна Корея (Сеул)', tz: 'Asia/Seoul' },
+      { id: 'cn', flag: '🇨🇳', name: 'Китай (Пекін)', tz: 'Asia/Shanghai' },
+      { id: 'sg', flag: '🇸🇬', name: 'Сінгапур', tz: 'Asia/Singapore' },
+      { id: 'in', flag: '🇮🇳', name: 'Індія (Нью-Делі)', tz: 'Asia/Kolkata' },
+      { id: 'au_sy', flag: '🇦🇺', name: 'Австралія (Сідней)', tz: 'Australia/Sydney' },
+      { id: 'nz', flag: '🇳🇿', name: 'Нова Зеландія (Окленд)', tz: 'Pacific/Auckland' },
+      { id: 'br_sp', flag: '🇧🇷', name: 'Бразилія (Сан-Паулу)', tz: 'America/Sao_Paulo' },
+      { id: 'mx_cd', flag: '🇲🇽', name: 'Мексика (Мехіко)', tz: 'America/Mexico_City' },
+      { id: 'ar', flag: '🇦🇷', name: 'Аргентина (Буенос-Айрес)', tz: 'America/Argentina/Buenos_Aires' }
+    ];
+
+    const SUPPORTED_LANGUAGES = [
+      { code: 'uk', label: 'Ukrainian', native: 'Українська' },
+      { code: 'en', label: 'English', native: 'English' },
+      { code: 'pl', label: 'Polish', native: 'Polski' },
+      { code: 'de', label: 'German', native: 'Deutsch' },
+      { code: 'fr', label: 'French', native: 'Français' },
+      { code: 'es', label: 'Spanish', native: 'Español' },
+      { code: 'it', label: 'Italian', native: 'Italiano' },
+      { code: 'pt', label: 'Portuguese', native: 'Português' },
+      { code: 'nl', label: 'Dutch', native: 'Nederlands' },
+      { code: 'sv', label: 'Swedish', native: 'Svenska' },
+      { code: 'no', label: 'Norwegian', native: 'Norsk' },
+      { code: 'da', label: 'Danish', native: 'Dansk' },
+      { code: 'fi', label: 'Finnish', native: 'Suomi' },
+      { code: 'is', label: 'Icelandic', native: 'Íslenska' },
+      { code: 'ga', label: 'Irish', native: 'Gaeilge' },
+      { code: 'cy', label: 'Welsh', native: 'Cymraeg' },
+      { code: 'gd', label: 'Scottish Gaelic', native: 'Gàidhlig' },
+      { code: 'lb', label: 'Luxembourgish', native: 'Lëtzebuergesch' },
+      { code: 'mt', label: 'Maltese', native: 'Malti' },
+      { code: 'cs', label: 'Czech', native: 'Čeština' },
+      { code: 'sk', label: 'Slovak', native: 'Slovenčina' },
+      { code: 'sl', label: 'Slovenian', native: 'Slovenščina' },
+      { code: 'hr', label: 'Croatian', native: 'Hrvatski' },
+      { code: 'sr', label: 'Serbian', native: 'Српски' },
+      { code: 'bs', label: 'Bosnian', native: 'Bosanski' },
+      { code: 'mk', label: 'Macedonian', native: 'Македонски' },
+      { code: 'bg', label: 'Bulgarian', native: 'Български' },
+      { code: 'ro', label: 'Romanian', native: 'Română' },
+      { code: 'hu', label: 'Hungarian', native: 'Magyar' },
+      { code: 'el', label: 'Greek', native: 'Ελληνικά' },
+      { code: 'sq', label: 'Albanian', native: 'Shqip' },
+      { code: 'lt', label: 'Lithuanian', native: 'Lietuvių' },
+      { code: 'lv', label: 'Latvian', native: 'Latviešu' },
+      { code: 'et', label: 'Estonian', native: 'Eesti' },
+      { code: 'be', label: 'Belarusian', native: 'Беларуская' },
+      { code: 'ka', label: 'Georgian', native: 'ქართული' },
+      { code: 'hy', label: 'Armenian', native: 'Հայերեն' },
+      { code: 'az', label: 'Azerbaijani', native: 'Azərbaycan' },
+      { code: 'kk', label: 'Kazakh', native: 'Қазақша' },
+      { code: 'uz', label: 'Uzbek', native: 'Oʻzbekcha' },
+      { code: 'ky', label: 'Kyrgyz', native: 'Кыргызча' },
+      { code: 'tg', label: 'Tajik', native: 'Тоҷикӣ' },
+      { code: 'tk', label: 'Turkmen', native: 'Türkmençe' },
+      { code: 'mn', label: 'Mongolian', native: 'Монгол' },
+      { code: 'tr', label: 'Turkish', native: 'Türkçe' },
+      { code: 'ar', label: 'Arabic', native: 'العربية' },
+      { code: 'he', label: 'Hebrew', native: 'עברית' },
+      { code: 'fa', label: 'Persian', native: 'فارسی' },
+      { code: 'ku', label: 'Kurdish', native: 'Kurdî' },
+      { code: 'ps', label: 'Pashto', native: 'پښتو' },
+      { code: 'ur', label: 'Urdu', native: 'اردو' },
+      { code: 'hi', label: 'Hindi', native: 'हिन्दी' },
+      { code: 'bn', label: 'Bengali', native: 'বাংলা' },
+      { code: 'pa', label: 'Punjabi', native: 'ਪੰਜਾਬੀ' },
+      { code: 'gu', label: 'Gujarati', native: 'ગુજરાતી' },
+      { code: 'mr', label: 'Marathi', native: 'मराठी' },
+      { code: 'ta', label: 'Tamil', native: 'தமிழ்' },
+      { code: 'te', label: 'Telugu', native: 'తెలుగు' },
+      { code: 'kn', label: 'Kannada', native: 'ಕನ್ನಡ' },
+      { code: 'ml', label: 'Malayalam', native: 'മലയാളം' },
+      { code: 'si', label: 'Sinhala', native: 'සිංහල' },
+      { code: 'ne', label: 'Nepali', native: 'नेपाली' },
+      { code: 'ja', label: 'Japanese', native: '日本語' },
+      { code: 'ko', label: 'Korean', native: '한국어' },
+      { code: 'zh', label: 'Chinese (Simplified)', native: '简体中文' },
+      { code: 'zh-TW', label: 'Chinese (Traditional)', native: '繁體中文' },
+      { code: 'th', label: 'Thai', native: 'ไทย' },
+      { code: 'vi', label: 'Vietnamese', native: 'Tiếng Việt' },
+      { code: 'id', label: 'Indonesian', native: 'Bahasa Indonesia' },
+      { code: 'ms', label: 'Malay', native: 'Bahasa Melayu' },
+      { code: 'tl', label: 'Filipino / Tagalog', native: 'Tagalog' },
+      { code: 'my', label: 'Burmese', native: 'မြန်မာစာ' },
+      { code: 'km', label: 'Khmer', native: 'ភាសាខ្មែរ' },
+      { code: 'lo', label: 'Lao', native: 'ລາວ' },
+      { code: 'sw', label: 'Swahili', native: 'Kiswahili' },
+      { code: 'am', label: 'Amharic', native: 'አማርኛ' },
+      { code: 'ha', label: 'Hausa', native: 'Hausa' },
+      { code: 'yo', label: 'Yoruba', native: 'Yorùbá' },
+      { code: 'ig', label: 'Igbo', native: 'Igbo' },
+      { code: 'zu', label: 'Zulu', native: 'isiZulu' },
+      { code: 'xh', label: 'Xhosa', native: 'isiXhosa' },
+      { code: 'af', label: 'Afrikaans', native: 'Afrikaans' },
+      { code: 'so', label: 'Somali', native: 'Soomaali' },
+      { code: 'ca', label: 'Catalan', native: 'Català' },
+      { code: 'eu', label: 'Basque', native: 'Euskara' },
+      { code: 'gl', label: 'Galician', native: 'Galego' },
+      { code: 'eo', label: 'Esperanto', native: 'Esperanto' },
+      { code: 'la', label: 'Latin', native: 'Latina' },
+      { code: 'haw', label: 'Hawaiian', native: 'ʻŌlelo Hawaiʻi' },
+      { code: 'mi', label: 'Māori', native: 'Te Reo Māori' },
+      { code: 'sm', label: 'Samoan', native: 'Gagana Sāmoa' },
+      { code: 'fj', label: 'Fijian', native: 'Vosa Vakaviti' },
+      { code: 'ht', label: 'Haitian Creole', native: 'Kreyòl Ayisyen' },
+      { code: 'qu', label: 'Quechua', native: 'Runasimi' },
+      { code: 'gn', label: 'Guarani', native: 'Avañeʼẽ' }
+    ];
+
+    const UI_DICTIONARY = {
+      uk: {
+        title: 'Синхронний Розклад для Двох',
+        subtitle: 'Спільний час та розклад у різних часових поясах',
+        createTab: '✨ Створити кімнату (К1)',
+        joinTab: '🤝 Приєднатися (К2)',
+        codeLabel: 'Код кімнати (10 символів)',
+        codePlaceholder: 'НАПРИКЛАД: 8K4M2P9X1Q',
+        nameLabel: 'Ваше ім\'я',
+        namePlaceholder: 'Введіть ваше ім\'я...',
+        countryLabel: 'Країна / Часовий пояс',
+        submitCreate: '✨ Створити та відкрити розклад',
+        submitJoin: '🤝 Приєднатися до кімнати',
+        roomActive: 'Кімната активна',
+        syncLive: '● Синхронно',
+        codeBtn: 'Код',
+        linkBtn: 'Посилання',
+        u1Placeholder: 'Ім\'я К1...',
+        u2Placeholder: 'Ім\'я К2...',
+        waitingU2: '⏳ Очікуємо приєднання К2 за кодом кімнати',
+        copyBtn: 'Копіювати',
+        currWeek: 'Поточний тиждень',
+        nextWeek: 'Наступний тиждень',
+        startLabel: 'Початок',
+        endLabel: 'Кінець',
+        taskPlaceholder: 'Назва заняття або зустрічі...',
+        addBtn: 'Додати',
+        timeCol: 'Час',
+        roomModalTitle: 'Код кімнати',
+        roomModalHint: 'Поділіться цим кодом або посиланням з іншим учасником',
+        copyCodeBtn: '📋 Копіювати код',
+        copyLinkBtn: '🔗 Копіювати посилання',
+        langModalTitle: 'Вибір мови',
+        langSearchPlaceholder: 'Пошук мови...',
+        hoursShort: 'год',
+        minsShort: 'хв',
+        checkTime: '⚠️ Перевірте час',
+        addedToast: '✅ Заняття додано',
+        codeCopiedToast: '📋 Код скопійовано:',
+        linkCopiedToast: '🔗 Посилання для запрошення скопійовано',
+        cats: {
+          call: '📞 Дзвінок', video: '🎥 Відеочат', date: '💖 Побачення', study: '📚 Навчання',
+          work: '💼 Робота / Справи', sport: '🏋️ Тренування', game: '🎮 Гра / Фільм',
+          travel: '✈️ Подорож', food: '🍽️ Вечеря / Кава', rest: '🌿 Відпочинок', sleep: '🌙 Сон'
+        }
+      },
+      en: {
+        title: 'Sync Schedule for Two',
+        subtitle: 'Shared time & schedule across different time zones',
+        createTab: '✨ Create Room (U1)',
+        joinTab: '🤝 Join Room (U2)',
+        codeLabel: 'Room Code (10 characters)',
+        codePlaceholder: 'EXAMPLE: 8K4M2P9X1Q',
+        nameLabel: 'Your Name',
+        namePlaceholder: 'Enter your name...',
+        countryLabel: 'Country / Time Zone',
+        submitCreate: '✨ Create & Open Schedule',
+        submitJoin: '🤝 Join Room',
+        roomActive: 'Room active',
+        syncLive: '● Synced',
+        codeBtn: 'Code',
+        linkBtn: 'Link',
+        u1Placeholder: 'U1 Name...',
+        u2Placeholder: 'U2 Name...',
+        waitingU2: '⏳ Waiting for U2 to join with room code',
+        copyBtn: 'Copy',
+        currWeek: 'Current Week',
+        nextWeek: 'Next Week',
+        startLabel: 'Start',
+        endLabel: 'End',
+        taskPlaceholder: 'Activity or meeting title...',
+        addBtn: 'Add',
+        timeCol: 'Time',
+        roomModalTitle: 'Room Code',
+        roomModalHint: 'Share this code or invite link with your partner',
+        copyCodeBtn: '📋 Copy Code',
+        copyLinkBtn: '🔗 Copy Link',
+        langModalTitle: 'Select Language',
+        langSearchPlaceholder: 'Search language...',
+        hoursShort: 'h',
+        minsShort: 'm',
+        checkTime: '⚠️ Check time',
+        addedToast: '✅ Activity added',
+        codeCopiedToast: '📋 Code copied:',
+        linkCopiedToast: '🔗 Invite link copied',
+        cats: {
+          call: '📞 Call', video: '🎥 Video Chat', date: '💖 Date', study: '📚 Study',
+          work: '💼 Work / Tasks', sport: '🏋️ Workout', game: '🎮 Game / Movie',
+          travel: '✈️ Travel', food: '🍽️ Dinner / Coffee', rest: '🌿 Rest', sleep: '🌙 Sleep'
+        }
+      },
+      pl: {
+        title: 'Wspólny Harmonogram dla Dwojga',
+        subtitle: 'Wspólny czas i plan dnia w różnych strefach czasowych',
+        createTab: '✨ Utwórz pokój (U1)',
+        joinTab: '🤝 Dołącz (U2)',
+        codeLabel: 'Kod pokoju (10 znaków)',
+        codePlaceholder: 'NP. 8K4M2P9X1Q',
+        nameLabel: 'Twoje imię',
+        namePlaceholder: 'Wpisz swoje imię...',
+        countryLabel: 'Kraj / Strefa czasowa',
+        submitCreate: '✨ Utwórz i otwórz plan',
+        submitJoin: '🤝 Dołącz do pokoju',
+        roomActive: 'Pokój aktywny',
+        syncLive: '● Zsynchronizowano',
+        codeBtn: 'Kod',
+        linkBtn: 'Link',
+        u1Placeholder: 'Imię U1...',
+        u2Placeholder: 'Imię U2...',
+        waitingU2: '⏳ Oczekiwanie na dołączenie U2 kodem pokoju',
+        copyBtn: 'Kopiuj',
+        currWeek: 'Bieżący tydzień',
+        nextWeek: 'Następny tydzień',
+        startLabel: 'Start',
+        endLabel: 'Koniec',
+        taskPlaceholder: 'Nazwa zajęcia lub spotkania...',
+        addBtn: 'Dodaj',
+        timeCol: 'Czas',
+        roomModalTitle: 'Kod pokoju',
+        roomModalHint: 'Udostępnij ten kod lub link drugiej osobie',
+        copyCodeBtn: '📋 Kopiuj kod',
+        copyLinkBtn: '🔗 Kopiuj link',
+        langModalTitle: 'Wybór języka',
+        langSearchPlaceholder: 'Szukaj języka...',
+        hoursShort: 'godz.',
+        minsShort: 'min',
+        checkTime: '⚠️ Sprawdź czas',
+        addedToast: '✅ Dodano zajęcie',
+        codeCopiedToast: '📋 Skopiowano kod:',
+        linkCopiedToast: '🔗 Skopiowano link zaproszenia',
+        cats: {
+          call: '📞 Rozmowa', video: '🎥 Wideo', date: '💖 Randka', study: '📚 Nauka',
+          work: '💼 Praca', sport: '🏋️ Trening', game: '🎮 Gra / Film',
+          travel: '✈️ Podróż', food: '🍽️ Kolacja / Kawa', rest: '🌿 Odpoczynek', sleep: '🌙 Sen'
+        }
+      },
+      de: {
+        title: 'Synchroner Zeitplan für Zwei',
+        subtitle: 'Gemeinsame Zeit & Planung über Zeitzonen hinweg',
+        createTab: '✨ Raum erstellen (N1)',
+        joinTab: '🤝 Beitreten (N2)',
+        codeLabel: 'Raumcode (10 Zeichen)',
+        codePlaceholder: 'BEISPIEL: 8K4M2P9X1Q',
+        nameLabel: 'Dein Name',
+        namePlaceholder: 'Namen eingeben...',
+        countryLabel: 'Land / Zeitzone',
+        submitCreate: '✨ Erstellen & öffnen',
+        submitJoin: '🤝 Raum beitreten',
+        roomActive: 'Raum aktiv',
+        syncLive: '● Synchron',
+        codeBtn: 'Code',
+        linkBtn: 'Link',
+        u1Placeholder: 'Name N1...',
+        u2Placeholder: 'Name N2...',
+        waitingU2: '⏳ Warten auf N2 mit dem Raumcode',
+        copyBtn: 'Kopieren',
+        currWeek: 'Aktuelle Woche',
+        nextWeek: 'Nächste Woche',
+        startLabel: 'Beginn',
+        endLabel: 'Ende',
+        taskPlaceholder: 'Aktivität oder Termin...',
+        addBtn: 'Hinzufügen',
+        timeCol: 'Zeit',
+        roomModalTitle: 'Raumcode',
+        roomModalHint: 'Teile diesen Code oder Link mit deinem Partner',
+        copyCodeBtn: '📋 Code kopieren',
+        copyLinkBtn: '🔗 Link kopieren',
+        langModalTitle: 'Sprache wählen',
+        langSearchPlaceholder: 'Sprache suchen...',
+        hoursShort: 'Std.',
+        minsShort: 'Min.',
+        checkTime: '⚠️ Zeit prüfen',
+        addedToast: '✅ Aktivität hinzugefügt',
+        codeCopiedToast: '📋 Code kopiert:',
+        linkCopiedToast: '🔗 Einladungslink kopiert',
+        cats: {
+          call: '📞 Anruf', video: '🎥 Videochat', date: '💖 Date', study: '📚 Lernen',
+          work: '💼 Arbeit', sport: '🏋️ Training', game: '🎮 Spiel / Film',
+          travel: '✈️ Reise', food: '🍽️ Essen / Kaffee', rest: '🌿 Pause', sleep: '🌙 Schlaf'
+        }
+      },
+      fr: {
+        title: 'Planning Synchronisé à Deux',
+        subtitle: 'Temps partagé et emploi du temps entre fuseaux horaires',
+        createTab: '✨ Créer un salon (U1)',
+        joinTab: '🤝 Rejoindre (U2)',
+        codeLabel: 'Code du salon (10 caractères)',
+        codePlaceholder: 'EXEMPLE : 8K4M2P9X1Q',
+        nameLabel: 'Votre prénom',
+        namePlaceholder: 'Entrez votre prénom...',
+        countryLabel: 'Pays / Fuseau horaire',
+        submitCreate: '✨ Créer et ouvrir',
+        submitJoin: '🤝 Rejoindre le salon',
+        roomActive: 'Salon actif',
+        syncLive: '● Synchronisé',
+        codeBtn: 'Code',
+        linkBtn: 'Lien',
+        u1Placeholder: 'Nom U1...',
+        u2Placeholder: 'Nom U2...',
+        waitingU2: '⏳ En attente de U2 avec le code du salon',
+        copyBtn: 'Copier',
+        currWeek: 'Semaine actuelle',
+        nextWeek: 'Semaine prochaine',
+        startLabel: 'Début',
+        endLabel: 'Fin',
+        taskPlaceholder: 'Titre de l’activité...',
+        addBtn: 'Ajouter',
+        timeCol: 'Heure',
+        roomModalTitle: 'Code du salon',
+        roomModalHint: 'Partagez ce code ou ce lien avec votre partenaire',
+        copyCodeBtn: '📋 Copier le code',
+        copyLinkBtn: '🔗 Copier le lien',
+        langModalTitle: 'Choisir la langue',
+        langSearchPlaceholder: 'Rechercher une langue...',
+        hoursShort: 'h',
+        minsShort: 'min',
+        checkTime: '⚠️ Vérifier l’heure',
+        addedToast: '✅ Activité ajoutée',
+        codeCopiedToast: '📋 Code copié :',
+        linkCopiedToast: '🔗 Lien d’invitation copié',
+        cats: {
+          call: '📞 Appel', video: '🎥 Visio', date: '💖 Rendez-vous', study: '📚 Études',
+          work: '💼 Travail', sport: '🏋️ Sport', game: '🎮 Jeu / Film',
+          travel: '✈️ Voyage', food: '🍽️ Dîner / Café', rest: '🌿 Repos', sleep: '🌙 Sommeil'
+        }
+      },
+      es: {
+        title: 'Horario Sincronizado para Dos',
+        subtitle: 'Tiempo compartido y agenda en distintas zonas horarias',
+        createTab: '✨ Crear sala (U1)',
+        joinTab: '🤝 Unirse (U2)',
+        codeLabel: 'Código de sala (10 caracteres)',
+        codePlaceholder: 'EJEMPLO: 8K4M2P9X1Q',
+        nameLabel: 'Tu nombre',
+        namePlaceholder: 'Escribe tu nombre...',
+        countryLabel: 'País / Zona horaria',
+        submitCreate: '✨ Crear y abrir horario',
+        submitJoin: '🤝 Unirse a la sala',
+        roomActive: 'Sala activa',
+        syncLive: '● Sincronizado',
+        codeBtn: 'Código',
+        linkBtn: 'Enlace',
+        u1Placeholder: 'Nombre U1...',
+        u2Placeholder: 'Nombre U2...',
+        waitingU2: '⏳ Esperando a U2 con el código de sala',
+        copyBtn: 'Copiar',
+        currWeek: 'Semana actual',
+        nextWeek: 'Próxima semana',
+        startLabel: 'Inicio',
+        endLabel: 'Fin',
+        taskPlaceholder: 'Nombre de la actividad...',
+        addBtn: 'Añadir',
+        timeCol: 'Hora',
+        roomModalTitle: 'Código de sala',
+        roomModalHint: 'Comparte este código o enlace con tu pareja',
+        copyCodeBtn: '📋 Copiar código',
+        copyLinkBtn: '🔗 Copiar enlace',
+        langModalTitle: 'Seleccionar idioma',
+        langSearchPlaceholder: 'Buscar idioma...',
+        hoursShort: 'h',
+        minsShort: 'min',
+        checkTime: '⚠️ Revisa la hora',
+        addedToast: '✅ Actividad añadida',
+        codeCopiedToast: '📋 Código copiado:',
+        linkCopiedToast: '🔗 Enlace de invitación copiado',
+        cats: {
+          call: '📞 Llamada', video: '🎥 Videollamada', date: '💖 Cita', study: '📚 Estudio',
+          work: '💼 Trabajo', sport: '🏋️ Entrenamiento', game: '🎮 Juego / Película',
+          travel: '✈️ Viaje', food: '🍽️ Cena / Café', rest: '🌿 Descanso', sleep: '🌙 Sueño'
+        }
+      },
+      it: {
+        title: 'Programma Sincronizzato per Due',
+        subtitle: 'Tempo condiviso e agenda in diversi fusi orari',
+        createTab: '✨ Crea stanza (U1)',
+        joinTab: '🤝 Unisciti (U2)',
+        codeLabel: 'Codice stanza (10 caratteri)',
+        codePlaceholder: 'ESEMPIO: 8K4M2P9X1Q',
+        nameLabel: 'Il tuo nome',
+        namePlaceholder: 'Inserisci il tuo nome...',
+        countryLabel: 'Paese / Fuso orario',
+        submitCreate: '✨ Crea e apri programma',
+        submitJoin: '🤝 Unisciti alla stanza',
+        roomActive: 'Stanza attiva',
+        syncLive: '● Sincronizzato',
+        codeBtn: 'Codice',
+        linkBtn: 'Link',
+        u1Placeholder: 'Nome U1...',
+        u2Placeholder: 'Nome U2...',
+        waitingU2: '⏳ In attesa di U2 con il codice stanza',
+        copyBtn: 'Copia',
+        currWeek: 'Settimana corrente',
+        nextWeek: 'Prossima settimana',
+        startLabel: 'Inizio',
+        endLabel: 'Fine',
+        taskPlaceholder: 'Nome attività o incontro...',
+        addBtn: 'Aggiungi',
+        timeCol: 'Ora',
+        roomModalTitle: 'Codice stanza',
+        roomModalHint: 'Condividi questo codice o link con il tuo partner',
+        copyCodeBtn: '📋 Copia codice',
+        copyLinkBtn: '🔗 Copia link',
+        langModalTitle: 'Seleziona lingua',
+        langSearchPlaceholder: 'Cerca lingua...',
+        hoursShort: 'h',
+        minsShort: 'min',
+        checkTime: '⚠️ Controlla l’ora',
+        addedToast: '✅ Attività aggiunta',
+        codeCopiedToast: '📋 Codice copiato:',
+        linkCopiedToast: '🔗 Link di invito copiato',
+        cats: {
+          call: '📞 Chiamata', video: '🎥 Videochiamata', date: '💖 Appuntamento', study: '📚 Studio',
+          work: '💼 Lavoro', sport: '🏋️ Allenamento', game: '🎮 Gioco / Film',
+          travel: '✈️ Viaggio', food: '🍽️ Cena / Caffè', rest: '🌿 Riposo', sleep: '🌙 Sonno'
+        }
+      },
+      pt: {
+        title: 'Agenda Sincronizada para Dois',
+        subtitle: 'Tempo compartilhado e horários em diferentes fusos',
+        createTab: '✨ Criar sala (U1)',
+        joinTab: '🤝 Entrar (U2)',
+        codeLabel: 'Código da sala (10 caracteres)',
+        codePlaceholder: 'EXEMPLO: 8K4M2P9X1Q',
+        nameLabel: 'Seu nome',
+        namePlaceholder: 'Digite seu nome...',
+        countryLabel: 'País / Fuso horário',
+        submitCreate: '✨ Criar e abrir agenda',
+        submitJoin: '🤝 Entrar na sala',
+        roomActive: 'Sala ativa',
+        syncLive: '● Sincronizado',
+        codeBtn: 'Código',
+        linkBtn: 'Link',
+        u1Placeholder: 'Nome U1...',
+        u2Placeholder: 'Nome U2...',
+        waitingU2: '⏳ Aguardando U2 entrar com o código da sala',
+        copyBtn: 'Copiar',
+        currWeek: 'Semana atual',
+        nextWeek: 'Próxima semana',
+        startLabel: 'Início',
+        endLabel: 'Fim',
+        taskPlaceholder: 'Título da atividade...',
+        addBtn: 'Adicionar',
+        timeCol: 'Hora',
+        roomModalTitle: 'Código da sala',
+        roomModalHint: 'Compartilhe este código ou link com seu par',
+        copyCodeBtn: '📋 Copiar código',
+        copyLinkBtn: '🔗 Copiar link',
+        langModalTitle: 'Selecionar idioma',
+        langSearchPlaceholder: 'Pesquisar idioma...',
+        hoursShort: 'h',
+        minsShort: 'min',
+        checkTime: '⚠️ Verifique a hora',
+        addedToast: '✅ Atividade adicionada',
+        codeCopiedToast: '📋 Código copiado:',
+        linkCopiedToast: '🔗 Link de convite copiado',
+        cats: {
+          call: '📞 Ligação', video: '🎥 Vídeo', date: '💖 Encontro', study: '📚 Estudo',
+          work: '💼 Trabalho', sport: '🏋️ Treino', game: '🎮 Jogo / Filme',
+          travel: '✈️ Viagem', food: '🍽️ Jantar / Café', rest: '🌿 Descanso', sleep: '🌙 Sono'
+        }
+      },
+      tr: {
+        title: 'İki Kişilik Senkronize Program',
+        subtitle: 'Farklı saat dilimlerinde ortak zaman ve planlama',
+        createTab: '✨ Oda Oluştur (K1)',
+        joinTab: '🤝 Katıl (K2)',
+        codeLabel: 'Oda Kodu (10 karakter)',
+        codePlaceholder: 'ÖRNEK: 8K4M2P9X1Q',
+        nameLabel: 'Adınız',
+        namePlaceholder: 'Adınızı girin...',
+        countryLabel: 'Ülke / Saat Dilimi',
+        submitCreate: '✨ Oluştur ve Aç',
+        submitJoin: '🤝 Odaya Katıl',
+        roomActive: 'Oda aktif',
+        syncLive: '● Senkronize',
+        codeBtn: 'Kod',
+        linkBtn: 'Bağlantı',
+        u1Placeholder: 'K1 Adı...',
+        u2Placeholder: 'K2 Adı...',
+        waitingU2: '⏳ K2 oda koduyla katılması bekleniyor',
+        copyBtn: 'Kopyala',
+        currWeek: 'Bu Hafta',
+        nextWeek: 'Gelecek Hafta',
+        startLabel: 'Başlangıç',
+        endLabel: 'Bitiş',
+        taskPlaceholder: 'Etkinlik veya buluşma adı...',
+        addBtn: 'Ekle',
+        timeCol: 'Saat',
+        roomModalTitle: 'Oda Kodu',
+        roomModalHint: 'Bu kodu veya bağlantıyı partnerinizle paylaşın',
+        copyCodeBtn: '📋 Kodu Kopyala',
+        copyLinkBtn: '🔗 Bağlantıyı Kopyala',
+        langModalTitle: 'Dil Seçin',
+        langSearchPlaceholder: 'Dil ara...',
+        hoursShort: 'sa',
+        minsShort: 'dk',
+        checkTime: '⚠️ Saati kontrol edin',
+        addedToast: '✅ Etkinlik eklendi',
+        codeCopiedToast: '📋 Kod kopyalandı:',
+        linkCopiedToast: '🔗 Davet bağlantısı kopyalandı',
+        cats: {
+          call: '📞 Arama', video: '🎥 Görüntülü', date: '💖 Buluşma', study: '📚 Ders',
+          work: '💼 İş', sport: '🏋️ Antrenman', game: '🎮 Oyun / Film',
+          travel: '✈️ Seyahat', food: '🍽️ Yemek / Kahve', rest: '🌿 Dinlenme', sleep: '🌙 Uyku'
+        }
+      },
+      el: {
+        title: 'Συγχρονισμένο Πρόγραμμα για Δύο',
+        subtitle: 'Κοινός χρόνος και πρόγραμμα σε διαφορετικές ζώνες ώρας',
+        createTab: '✨ Δημιουργία δωματίου (Χ1)',
+        joinTab: '🤝 Σύνδεση (Χ2)',
+        codeLabel: 'Κωδικός δωματίου (10 χαρακτήρες)',
+        codePlaceholder: 'ΠΑΡΑΔΕΙΓΜΑ: 8K4M2P9X1Q',
+        nameLabel: 'Το όνομά σας',
+        namePlaceholder: 'Εισάγετε το όνομά σας...',
+        countryLabel: 'Χώρα / Ζώνη ώρας',
+        submitCreate: '✨ Δημιουργία & Άνοιγμα',
+        submitJoin: '🤝 Είσοδος στο δωμάτιο',
+        roomActive: 'Ενεργό δωμάτιο',
+        syncLive: '● Συγχρονισμένο',
+        codeBtn: 'Κωδικός',
+        linkBtn: 'Σύνδεσμος',
+        u1Placeholder: 'Όνομα Χ1...',
+        u2Placeholder: 'Όνομα Χ2...',
+        waitingU2: '⏳ Αναμονή για σύνδεση του Χ2 με κωδικό',
+        copyBtn: 'Αντιγραφή',
+        currWeek: 'Τρέχουσα εβδομάδα',
+        nextWeek: 'Επόμενη εβδομάδα',
+        startLabel: 'Έναρξη',
+        endLabel: 'Λήξη',
+        taskPlaceholder: 'Τίτλος δραστηριότητας...',
+        addBtn: 'Προσθήκη',
+        timeCol: 'Ώρα',
+        roomModalTitle: 'Κωδικός δωματίου',
+        roomModalHint: 'Μοιραστείτε αυτόν τον κωδικό ή σύνδεσμο',
+        copyCodeBtn: '📋 Αντιγραφή κωδικού',
+        copyLinkBtn: '🔗 Αντιγραφή συνδέσμου',
+        langModalTitle: 'Επιλογή γλώσσας',
+        langSearchPlaceholder: 'Αναζήτηση γλώσσας...',
+        hoursShort: 'ώ',
+        minsShort: 'λ',
+        checkTime: '⚠️ Ελέγξτε την ώρα',
+        addedToast: '✅ Η δραστηριότητα προστέθηκε',
+        codeCopiedToast: '📋 Ο κωδικός αντιγράφηκε:',
+        linkCopiedToast: '🔗 Ο σύνδεσμος αντιγράφηκε',
+        cats: {
+          call: '📞 Κλήση', video: '🎥 Βιντεοκλήση', date: '💖 Ραντεβού', study: '📚 Μελέτη',
+          work: '💼 Εργασία', sport: '🏋️ Προπόνηση', game: '🎮 Παιχνίδι / Ταινία',
+          travel: '✈️ Ταξίδι', food: '🍽️ Φαγητό / Καφές', rest: '🌿 Ξεκούραση', sleep: '🌙 Ύπνος'
+        }
+      },
+      ja: {
+        title: '二人の同期スケジュール',
+        subtitle: '異なるタイムゾーンで共有する時間と予定表',
+        createTab: '✨ ルーム作成 (U1)',
+        joinTab: '🤝 参加する (U2)',
+        codeLabel: 'ルームコード (10文字)',
+        codePlaceholder: '例: 8K4M2P9X1Q',
+        nameLabel: 'あなたの名前',
+        namePlaceholder: '名前を入力...',
+        countryLabel: '国 / タイムゾーン',
+        submitCreate: '✨ 作成して開く',
+        submitJoin: '🤝 ルームに参加',
+        roomActive: 'ルーム有効',
+        syncLive: '● 同期中',
+        codeBtn: 'コード',
+        linkBtn: 'リンク',
+        u1Placeholder: 'U1の名前...',
+        u2Placeholder: 'U2の名前...',
+        waitingU2: '⏳ U2の参加を待っています',
+        copyBtn: 'コピー',
+        currWeek: '今週',
+        nextWeek: '来週',
+        startLabel: '開始',
+        endLabel: '終了',
+        taskPlaceholder: '予定のタイトル...',
+        addBtn: '追加',
+        timeCol: '時間',
+        roomModalTitle: 'ルームコード',
+        roomModalHint: 'このコードまたはリンクを共有してください',
+        copyCodeBtn: '📋 コードをコピー',
+        copyLinkBtn: '🔗 リンクをコピー',
+        langModalTitle: '言語を選択',
+        langSearchPlaceholder: '言語を検索...',
+        hoursShort: '時間',
+        minsShort: '分',
+        checkTime: '⚠️ 時間を確認してください',
+        addedToast: '✅ 予定を追加しました',
+        codeCopiedToast: '📋 コードをコピーしました:',
+        linkCopiedToast: '🔗 招待リンクをコピーしました',
+        cats: {
+          call: '📞 通話', video: '🎥 ビデオ通話', date: '💖 デート', study: '📚 勉強',
+          work: '💼 仕事', sport: '🏋️ 運動', game: '🎮 ゲーム・映画',
+          travel: '✈️ 旅行', food: '🍽️ 食事・カフェ', rest: '🌿 休憩', sleep: '🌙 睡眠'
+        }
+      },
+      ko: {
+        title: '둘만의 동기화 일정표',
+        subtitle: '서로 다른 시간대에서 함께 보는 시간과 일정',
+        createTab: '✨ 방 만들기 (U1)',
+        joinTab: '🤝 참여하기 (U2)',
+        codeLabel: '방 코드 (10자리)',
+        codePlaceholder: '예: 8K4M2P9X1Q',
+        nameLabel: '이름',
+        namePlaceholder: '이름을 입력하세요...',
+        countryLabel: '국가 / 시간대',
+        submitCreate: '✨ 생성 및 열기',
+        submitJoin: '🤝 방 참여하기',
+        roomActive: '방 활성화됨',
+        syncLive: '● 동기화됨',
+        codeBtn: '코드',
+        linkBtn: '링크',
+        u1Placeholder: 'U1 이름...',
+        u2Placeholder: 'U2 이름...',
+        waitingU2: '⏳ 방 코드로 U2 참여 대기 중',
+        copyBtn: '복사',
+        currWeek: '이번 주',
+        nextWeek: '다음 주',
+        startLabel: '시작',
+        endLabel: '종료',
+        taskPlaceholder: '일정 제목 입력...',
+        addBtn: '추가',
+        timeCol: '시간',
+        roomModalTitle: '방 코드',
+        roomModalHint: '상대방에게 이 코드나 링크를 공유하세요',
+        copyCodeBtn: '📋 코드 복사',
+        copyLinkBtn: '🔗 링크 복사',
+        langModalTitle: '언어 선택',
+        langSearchPlaceholder: '언어 검색...',
+        hoursShort: '시간',
+        minsShort: '분',
+        checkTime: '⚠️ 시간을 확인하세요',
+        addedToast: '✅ 일정이 추가되었습니다',
+        codeCopiedToast: '📋 코드 복사됨:',
+        linkCopiedToast: '🔗 초대 링크가 복사되었습니다',
+        cats: {
+          call: '📞 통화', video: '🎥 영상통화', date: '💖 데이트', study: '📚 공부',
+          work: '💼 업무', sport: '🏋️ 운동', game: '🎮 게임 / 영화',
+          travel: '✈️ 여행', food: '🍽️ 식사 / 카페', rest: '🌿 휴식', sleep: '🌙 수면'
+        }
+      },
+      zh: {
+        title: '双人同步日程表',
+        subtitle: '跨时区共享时间与日常安排',
+        createTab: '✨ 创建房间 (U1)',
+        joinTab: '🤝 加入房间 (U2)',
+        codeLabel: '房间代码 (10位字符)',
+        codePlaceholder: '例如: 8K4M2P9X1Q',
+        nameLabel: '你的名字',
+        namePlaceholder: '输入你的名字...',
+        countryLabel: '国家 / 时区',
+        submitCreate: '✨ 创建并打开日程',
+        submitJoin: '🤝 加入房间',
+        roomActive: '房间已激活',
+        syncLive: '● 已同步',
+        codeBtn: '代码',
+        linkBtn: '链接',
+        u1Placeholder: 'U1 名字...',
+        u2Placeholder: 'U2 名字...',
+        waitingU2: '⏳ 等待 U2 输入房间代码加入',
+        copyBtn: '复制',
+        currWeek: '本周',
+        nextWeek: '下周',
+        startLabel: '开始',
+        endLabel: '结束',
+        taskPlaceholder: '输入日程或活动名称...',
+        addBtn: '添加',
+        timeCol: '时间',
+        roomModalTitle: '房间代码',
+        roomModalHint: '将此代码或链接分享给对方',
+        copyCodeBtn: '📋 复制代码',
+        copyLinkBtn: '🔗 复制链接',
+        langModalTitle: '选择语言',
+        langSearchPlaceholder: '搜索语言...',
+        hoursShort: '小时',
+        minsShort: '分钟',
+        checkTime: '⚠️ 请检查时间',
+        addedToast: '✅ 已添加日程',
+        codeCopiedToast: '📋 已复制代码:',
+        linkCopiedToast: '🔗 邀请链接已复制',
+        cats: {
+          call: '📞 通话', video: '🎥 视频', date: '💖 约会', study: '📚 学习',
+          work: '💼 工作', sport: '🏋️ 运动', game: '🎮 游戏 / 电影',
+          travel: '✈️ 旅行', food: '🍽️ 餐饮 / 咖啡', rest: '🌿 休息', sleep: '🌙 睡眠'
+        }
+      },
+      ar: {
+        title: 'جدول متزامن لشخصين',
+        subtitle: 'وقت مشترك وجدول أعمال عبر مناطق زمنية مختلفة',
+        createTab: '✨ إنشاء غرفة (U1)',
+        joinTab: '🤝 انضمام (U2)',
+        codeLabel: 'رمز الغرفة (10 أحرف)',
+        codePlaceholder: 'مثال: 8K4M2P9X1Q',
+        nameLabel: 'اسمك',
+        namePlaceholder: 'أدخل اسمك...',
+        countryLabel: 'الدولة / المنطقة الزمنية',
+        submitCreate: '✨ إنشاء وفتح الجدول',
+        submitJoin: '🤝 الانضمام إلى الغرفة',
+        roomActive: 'الغرفة نشطة',
+        syncLive: '● متزامن',
+        codeBtn: 'الرمز',
+        linkBtn: 'الرابط',
+        u1Placeholder: 'اسم U1...',
+        u2Placeholder: 'اسم U2...',
+        waitingU2: '⏳ بانتظار انضمام U2 برمز الغرفة',
+        copyBtn: 'نسخ',
+        currWeek: 'الأسبوع الحالي',
+        nextWeek: 'الأسبوع القادم',
+        startLabel: 'البداية',
+        endLabel: 'النهاية',
+        taskPlaceholder: 'عنوان النشاط أو الموعد...',
+        addBtn: 'إضافة',
+        timeCol: 'الوقت',
+        roomModalTitle: 'رمز الغرفة',
+        roomModalHint: 'شارك هذا الرمز أو الرابط مع الطرف الآخر',
+        copyCodeBtn: '📋 نسخ الرمز',
+        copyLinkBtn: '🔗 نسخ الرابط',
+        langModalTitle: 'اختر اللغة',
+        langSearchPlaceholder: 'ابحث عن لغة...',
+        hoursShort: 'س',
+        minsShort: 'د',
+        checkTime: '⚠️ تحقق من الوقت',
+        addedToast: '✅ تمت إضافة النشاط',
+        codeCopiedToast: '📋 تم نسخ الرمز:',
+        linkCopiedToast: '🔗 تم نسخ رابط الدعوة',
+        cats: {
+          call: '📞 مكالمة', video: '🎥 فيديو', date: '💖 موعد', study: '📚 دراسة',
+          work: '💼 عمل', sport: '🏋️ رياضة', game: '🎮 لعبة / فيلم',
+          travel: '✈️ سفر', food: '🍽️ عشاء / قهوة', rest: '🌿 راحة', sleep: '🌙 نوم'
+        }
+      },
+      hi: {
+        title: 'दो लोगों के लिए सिंक शेड्यूल',
+        subtitle: 'अलग-अलग टाइम ज़ोन में साझा समय और शेड्यूल',
+        createTab: '✨ रूम बनाएं (U1)',
+        joinTab: '🤝 जुड़ें (U2)',
+        codeLabel: 'रूम कोड (10 अक्षर)',
+        codePlaceholder: 'उदाहरण: 8K4M2P9X1Q',
+        nameLabel: 'आपका नाम',
+        namePlaceholder: 'अपना नाम लिखें...',
+        countryLabel: 'देश / समय क्षेत्र',
+        submitCreate: '✨ बनाएं और खोलें',
+        submitJoin: '🤝 रूम से जुड़ें',
+        roomActive: 'रूम सक्रिय है',
+        syncLive: '● सिंक किया गया',
+        codeBtn: 'कोड',
+        linkBtn: 'लिंक',
+        u1Placeholder: 'U1 नाम...',
+        u2Placeholder: 'U2 नाम...',
+        waitingU2: '⏳ रूम कोड के साथ U2 की प्रतीक्षा है',
+        copyBtn: 'कॉपी',
+        currWeek: 'वर्तमान सप्ताह',
+        nextWeek: 'अगला सप्ताह',
+        startLabel: 'शुरू',
+        endLabel: 'समाप्त',
+        taskPlaceholder: 'गतिविधि का नाम...',
+        addBtn: 'जोड़ें',
+        timeCol: 'समय',
+        roomModalTitle: 'रूम कोड',
+        roomModalHint: 'यह कोड या लिंक अपने साथी के साथ साझा करें',
+        copyCodeBtn: '📋 कोड कॉपी करें',
+        copyLinkBtn: '🔗 लिंक कॉपी करें',
+        langModalTitle: 'भाषा चुनें',
+        langSearchPlaceholder: 'भाषा खोजें...',
+        hoursShort: 'घं',
+        minsShort: 'मि',
+        checkTime: '⚠️ समय जांचें',
+        addedToast: '✅ गतिविधि जोड़ी गई',
+        codeCopiedToast: '📋 कोड कॉपी किया गया:',
+        linkCopiedToast: '🔗 आमंत्रण लिंक कॉपी किया गया',
+        cats: {
+          call: '📞 कॉल', video: '🎥 वीडियो चैट', date: '💖 डेट', study: '📚 पढ़ाई',
+          work: '💼 काम', sport: '🏋️ कसरत', game: '🎮 गेम / फिल्म',
+          travel: '✈️ यात्रा', food: '🍽️ खाना / कॉफ़ी', rest: '🌿 आराम', sleep: '🌙 नींद'
+        }
+      },
+      cs: {
+        title: 'Synchronní rozvrh pro dva',
+        subtitle: 'Společný čas a plánování v různých časových pásmech',
+        createTab: '✨ Vytvořit místnost (U1)',
+        joinTab: '🤝 Připojit se (U2)',
+        codeLabel: 'Kód místnosti (10 znaků)',
+        codePlaceholder: 'PŘÍKLAD: 8K4M2P9X1Q',
+        nameLabel: 'Vaše jméno',
+        namePlaceholder: 'Zadejte své jméno...',
+        countryLabel: 'Země / Časové pásmo',
+        submitCreate: '✨ Vytvořit a otevřít',
+        submitJoin: '🤝 Připojit se k místnosti',
+        roomActive: 'Místnost aktivní',
+        syncLive: '● Synchronizováno',
+        codeBtn: 'Kód',
+        linkBtn: 'Odkaz',
+        u1Placeholder: 'Jméno U1...',
+        u2Placeholder: 'Jméno U2...',
+        waitingU2: '⏳ Čekání na připojení U2 pomocí kódu',
+        copyBtn: 'Kopírovat',
+        currWeek: 'Aktuální týden',
+        nextWeek: 'Příští týden',
+        startLabel: 'Začátek',
+        endLabel: 'Konec',
+        taskPlaceholder: 'Název aktivity nebo schůzky...',
+        addBtn: 'Přidat',
+        timeCol: 'Čas',
+        roomModalTitle: 'Kód místnosti',
+        roomModalHint: 'Sdílejte tento kód nebo odkaz s partnerem',
+        copyCodeBtn: '📋 Kopírovat kód',
+        copyLinkBtn: '🔗 Kopírovat odkaz',
+        langModalTitle: 'Výběr jazyka',
+        langSearchPlaceholder: 'Hledat jazyk...',
+        hoursShort: 'h',
+        minsShort: 'min',
+        checkTime: '⚠️ Zkontrolujte čas',
+        addedToast: '✅ Aktivita přidána',
+        codeCopiedToast: '📋 Kód zkopírován:',
+        linkCopiedToast: '🔗 Odkaz zkopírován',
+        cats: {
+          call: '📞 Hovor', video: '🎥 Videohovor', date: '💖 Rande', study: '📚 Studium',
+          work: '💼 Práce', sport: '🏋️ Trénink', game: '🎮 Hra / Film',
+          travel: '✈️ Cesta', food: '🍽️ Večeře / Káva', rest: '🌿 Odpočinek', sleep: '🌙 Spánek'
+        }
+      },
+      nl: {
+        title: 'Synchroon Schema voor Twee',
+        subtitle: 'Gedeelde tijd en planning in verschillende tijdzones',
+        createTab: '✨ Kamer maken (U1)',
+        joinTab: '🤝 Deelnemen (U2)',
+        codeLabel: 'Kamercode (10 tekens)',
+        codePlaceholder: 'VOORBEELD: 8K4M2P9X1Q',
+        nameLabel: 'Jouw naam',
+        namePlaceholder: 'Voer je naam in...',
+        countryLabel: 'Land / Tijdzone',
+        submitCreate: '✨ Maken en openen',
+        submitJoin: '🤝 Deelnemen aan kamer',
+        roomActive: 'Kamer actief',
+        syncLive: '● Gesynchroniseerd',
+        codeBtn: 'Code',
+        linkBtn: 'Link',
+        u1Placeholder: 'Naam U1...',
+        u2Placeholder: 'Naam U2...',
+        waitingU2: '⏳ Wachten tot U2 deelneemt met de kamercode',
+        copyBtn: 'Kopiëren',
+        currWeek: 'Huidige week',
+        nextWeek: 'Volgende week',
+        startLabel: 'Start',
+        endLabel: 'Einde',
+        taskPlaceholder: 'Naam van activiteit...',
+        addBtn: 'Toevoegen',
+        timeCol: 'Tijd',
+        roomModalTitle: 'Kamercode',
+        roomModalHint: 'Deel deze code of link met je partner',
+        copyCodeBtn: '📋 Code kopiëren',
+        copyLinkBtn: '🔗 Link kopiëren',
+        langModalTitle: 'Taal kiezen',
+        langSearchPlaceholder: 'Zoek taal...',
+        hoursShort: 'u',
+        minsShort: 'min',
+        checkTime: '⚠️ Controleer tijd',
+        addedToast: '✅ Activiteit toegevoegd',
+        codeCopiedToast: '📋 Code gekopieerd:',
+        linkCopiedToast: '🔗 Uitnodigingslink gekopieerd',
+        cats: {
+          call: '📞 Bellen', video: '🎥 Videogesprek', date: '💖 Date', study: '📚 Studie',
+          work: '💼 Werk', sport: '🏋️ Sporten', game: '🎮 Game / Film',
+          travel: '✈️ Reizen', food: '🍽️ Diner / Koffie', rest: '🌿 Rust', sleep: '🌙 Slaap'
+        }
+      },
+      ro: {
+        title: 'Program Sincronizat pentru Doi',
+        subtitle: 'Timp comun și agendă în fusuri orare diferite',
+        createTab: '✨ Creează cameră (U1)',
+        joinTab: '🤝 Alătură-te (U2)',
+        codeLabel: 'Codul camerei (10 caractere)',
+        codePlaceholder: 'EXEMPLU: 8K4M2P9X1Q',
+        nameLabel: 'Numele tău',
+        namePlaceholder: 'Introdu numele tău...',
+        countryLabel: 'Țară / Fus orar',
+        submitCreate: '✨ Creează și deschide',
+        submitJoin: '🤝 Intră în cameră',
+        roomActive: 'Cameră activă',
+        syncLive: '● Sincronizat',
+        codeBtn: 'Cod',
+        linkBtn: 'Link',
+        u1Placeholder: 'Nume U1...',
+        u2Placeholder: 'Nume U2...',
+        waitingU2: '⏳ Se așteaptă ca U2 să intre cu codul camerei',
+        copyBtn: 'Copiază',
+        currWeek: 'Săptămâna curentă',
+        nextWeek: 'Săptămâna viitoare',
+        startLabel: 'Început',
+        endLabel: 'Sfârșit',
+        taskPlaceholder: 'Numele activității...',
+        addBtn: 'Adaugă',
+        timeCol: 'Oră',
+        roomModalTitle: 'Codul camerei',
+        roomModalHint: 'Trimite acest cod sau link partenerului',
+        copyCodeBtn: '📋 Copiază codul',
+        copyLinkBtn: '🔗 Copiază linkul',
+        langModalTitle: 'Alege limba',
+        langSearchPlaceholder: 'Caută limba...',
+        hoursShort: 'h',
+        minsShort: 'min',
+        checkTime: '⚠️ Verifică ora',
+        addedToast: '✅ Activitate adăugată',
+        codeCopiedToast: '📋 Cod copiat:',
+        linkCopiedToast: '🔗 Link de invitație copiat',
+        cats: {
+          call: '📞 Apel', video: '🎥 Apel video', date: '💖 Întâlnire', study: '📚 Studiu',
+          work: '💼 Muncă', sport: '🏋️ Antrenament', game: '🎮 Joc / Film',
+          travel: '✈️ Călătorie', food: '🍽️ Cină / Cafea', rest: '🌿 Odihnă', sleep: '🌙 Somn'
+        }
+      },
+      sv: {
+        title: 'Synkroniserat Schema för Två',
+        subtitle: 'Gemensam tid och planering i olika tidszoner',
+        createTab: '✨ Skapa rum (U1)',
+        joinTab: '🤝 Gå med (U2)',
+        codeLabel: 'Rumskod (10 tecken)',
+        codePlaceholder: 'EXEMPEL: 8K4M2P9X1Q',
+        nameLabel: 'Ditt namn',
+        namePlaceholder: 'Ange ditt namn...',
+        countryLabel: 'Land / Tidszon',
+        submitCreate: '✨ Skapa och öppna',
+        submitJoin: '🤝 Gå med i rum',
+        roomActive: 'Rum aktivt',
+        syncLive: '● Synkroniserat',
+        codeBtn: 'Kod',
+        linkBtn: 'Länk',
+        u1Placeholder: 'Namn U1...',
+        u2Placeholder: 'Namn U2...',
+        waitingU2: '⏳ Väntar på att U2 går med via rumskod',
+        copyBtn: 'Kopiera',
+        currWeek: 'Denna vecka',
+        nextWeek: 'Nästa vecka',
+        startLabel: 'Start',
+        endLabel: 'Slut',
+        taskPlaceholder: 'Aktivitetens namn...',
+        addBtn: 'Lägg till',
+        timeCol: 'Tid',
+        roomModalTitle: 'Rumskod',
+        roomModalHint: 'Dela denna kod eller länk med din partner',
+        copyCodeBtn: '📋 Kopiera kod',
+        copyLinkBtn: '🔗 Kopiera länk',
+        langModalTitle: 'Välj språk',
+        langSearchPlaceholder: 'Sök språk...',
+        hoursShort: 'tim',
+        minsShort: 'min',
+        checkTime: '⚠️ Kontrollera tiden',
+        addedToast: '✅ Aktivitet tillagd',
+        codeCopiedToast: '📋 Kod kopierad:',
+        linkCopiedToast: '🔗 Inbjudningslänk kopierad',
+        cats: {
+          call: '📞 Samtal', video: '🎥 Videosamtal', date: '💖 Dejt', study: '📚 Studier',
+          work: '💼 Arbete', sport: '🏋️ Träning', game: '🎮 Spel / Film',
+          travel: '✈️ Resa', food: '🍽️ Middag / Kaffe', rest: '🌿 Vila', sleep: '🌙 Sömn'
+        }
+      }
+    };
+
+    const dynamicLangDictionaryCache = {};
+
+    function getUiStrings() {
+      const full = String(currentLang || 'uk');
+      const baseCode = full.split('-')[0];
+      return UI_DICTIONARY[full] || UI_DICTIONARY[baseCode] || dynamicLangDictionaryCache[full] || UI_DICTIONARY.en;
+    }
+
+    async function fetchTranslatedDictionaryForLang(targetLang) {
+      const full = String(targetLang || 'en');
+      const base = full.split('-')[0];
+      if (UI_DICTIONARY[full] || UI_DICTIONARY[base] || dynamicLangDictionaryCache[full]) {
+        return getUiStrings();
+      }
+
+      const enSrc = UI_DICTIONARY.en;
+      const flatKeys = [
+        'title', 'subtitle', 'createTab', 'joinTab', 'codeLabel', 'codePlaceholder',
+        'nameLabel', 'namePlaceholder', 'countryLabel', 'submitCreate', 'submitJoin',
+        'roomActive', 'syncLive', 'codeBtn', 'linkBtn', 'u1Placeholder', 'u2Placeholder',
+        'waitingU2', 'copyBtn', 'currWeek', 'nextWeek', 'startLabel', 'endLabel',
+        'taskPlaceholder', 'addBtn', 'timeCol', 'roomModalTitle', 'roomModalHint',
+        'copyCodeBtn', 'copyLinkBtn', 'langModalTitle', 'langSearchPlaceholder',
+        'checkTime', 'addedToast', 'codeCopiedToast', 'linkCopiedToast'
+      ];
+      const catKeys = Object.keys(enSrc.cats);
+      const sourceLines = [
+        ...flatKeys.map(k => enSrc[k]),
+        ...catKeys.map(ck => enSrc.cats[ck])
+      ];
+
+      try {
+        const queryText = sourceLines.join('\n');
+        const apiUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=${encodeURIComponent(full)}&dt=t&q=${encodeURIComponent(queryText)}`;
+        const resp = await fetch(apiUrl);
+        if (resp.ok) {
+          const json = await resp.json();
+          const combined = (json && Array.isArray(json[0]))
+            ? json[0].map(part => part[0] || '').join('')
+            : '';
+          const translatedLines = combined.split('\n');
+          if (translatedLines.length >= sourceLines.length) {
+            const built = {
+              hoursShort: enSrc.hoursShort,
+              minsShort: enSrc.minsShort,
+              cats: {}
+            };
+            flatKeys.forEach((k, idx) => {
+              built[k] = (translatedLines[idx] || enSrc[k]).trim();
+            });
+            catKeys.forEach((ck, idx) => {
+              built.cats[ck] = (translatedLines[flatKeys.length + idx] || enSrc.cats[ck]).trim();
+            });
+            dynamicLangDictionaryCache[full] = built;
+            return built;
+          }
+        }
+      } catch (e) {}
+
+      return enSrc;
+    }
+
+    async function applyLanguage(code, closeModalAfter) {
+      currentLang = code || 'uk';
+      try {
+        localStorage.setItem('sync_schedule_lang_v2', currentLang);
+      } catch (e) {}
+
+      const shortBadge = currentLang.toUpperCase();
+      const obLangBtn = document.getElementById('obLangSwitchBtn');
+      const mainLangBtn = document.getElementById('langSwitchBtn');
+      if (obLangBtn) obLangBtn.textContent = `🌐 ${shortBadge}`;
+      if (mainLangBtn) mainLangBtn.textContent = `🌐 ${shortBadge}`;
+
+      if (closeModalAfter) closeLangModal();
+
+      const t = await fetchTranslatedDictionaryForLang(currentLang);
+
+      const setTxt = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = val;
+      };
+      const setPh = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.placeholder = val;
+      };
+
+      setTxt('obTitle', t.title);
+      setTxt('obSubtitle', t.subtitle);
+      setTxt('tabCreateBtn', t.createTab);
+      setTxt('tabJoinBtn', t.joinTab);
+      setTxt('obCodeLabel', t.codeLabel);
+      setPh('obRoomCodeInput', t.codePlaceholder);
+      setTxt('obNameLabel', t.nameLabel);
+      setPh('obNameInput', t.namePlaceholder);
+      setTxt('obCountryLabel', t.countryLabel);
+      setTxt('obSubmitBtn', onboardingMode === 'join' ? t.submitJoin : t.submitCreate);
+
+      setTxt('appMainTitle', t.title);
+      setTxt('roomStatusBadge', t.roomActive);
+      setTxt('syncStatusLabel', t.syncLive);
+      setTxt('codeBtnLabel', t.codeBtn);
+      setTxt('linkBtnLabel', t.linkBtn);
+      setPh('u1NameInput', t.u1Placeholder);
+      setPh('u2NameInput', t.u2Placeholder);
+      setTxt('u2WaitingText', t.waitingU2);
+      setTxt('u2WaitingCopyBtn', t.copyBtn);
+      setTxt('currWeekBtn', t.currWeek);
+      setTxt('nextWeekBtn', t.nextWeek);
+      setTxt('taskStartLabel', t.startLabel);
+      setTxt('taskEndLabel', t.endLabel);
+      setPh('taskTitleInput', t.taskPlaceholder);
+      setTxt('addTaskBtnLabel', t.addBtn);
+      setTxt('colTimeHeader', t.timeCol);
+
+      setTxt('modalRoomTitle', t.roomModalTitle);
+      setTxt('modalRoomHint', t.roomModalHint);
+      setTxt('modalCopyCodeBtn', t.copyCodeBtn);
+      setTxt('modalCopyLinkBtn', t.copyLinkBtn);
+      setTxt('langModalTitle', t.langModalTitle);
+      setPh('langSearchInput', t.langSearchPlaceholder);
+
+      const catSelect = document.getElementById('taskCategorySelect');
+      if (catSelect && t.cats) {
+        for (const opt of catSelect.options) {
+          if (t.cats[opt.value]) {
+            opt.textContent = t.cats[opt.value];
+          }
+        }
+      }
+
+      formatAndValidateTimeInputs();
+      renderAll();
+    }
+
+    function getMondayOfWeek(weekOffset) {
+      const now = new Date();
+      const dayOfWeek = now.getDay();
+      const diffToMon = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+      const mon = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diffToMon + (weekOffset * 7));
+      mon.setHours(0, 0, 0, 0);
+      return mon;
+    }
+
+    function getCurrentDayIndexInCurrentWeek() {
+      const now = new Date();
+      const dayOfWeek = now.getDay();
+      return dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    }
+
+    function formatIsoDate(dateObj) {
+      const y = dateObj.getFullYear();
+      const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const d = String(dateObj.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+
+    function getSelectedDateObj() {
+      const mon = getMondayOfWeek(state.weekOffset);
+      const d = new Date(mon);
+      d.setDate(mon.getDate() + (state.selectedDayIndex || 0));
+      return d;
+    }
+
+    function setWeekOffset(offset) {
+      state.weekOffset = offset;
+      state.selectedDayIndex = offset === 0 ? getCurrentDayIndexInCurrentWeek() : 0;
+      document.getElementById('currWeekBtn').className = offset === 0
+        ? 'px-4 py-2 rounded-xl text-xs font-extrabold tiffany-pink-btn transition'
+        : 'px-4 py-2 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/15 text-white transition';
+      document.getElementById('nextWeekBtn').className = offset === 1
+        ? 'px-4 py-2 rounded-xl text-xs font-extrabold tiffany-pink-btn transition'
+        : 'px-4 py-2 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/15 text-white transition';
+      saveStateLocal();
+      renderWeekDays();
+      renderSyncTimeline();
+    }
+
+    function selectDay(idx) {
+      state.selectedDayIndex = idx;
+      saveStateLocal();
+      renderWeekDays();
+      renderSyncTimeline();
+    }
+
+    function getMoonPhaseInfo(dateObj) {
+      const knownNewMoon = Date.UTC(2000, 0, 6, 18, 14, 0);
+      const synodicMonth = 29.530588853;
+      const targetUtc = Date.UTC(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate(), 12, 0, 0);
+      const daysSince = (targetUtc - knownNewMoon) / 86400000;
+      const cyclePos = ((daysSince % synodicMonth) + synodicMonth) % synodicMonth;
+      const phaseFraction = cyclePos / synodicMonth;
+
+      let name = 'Молодик';
+      let emoji = '🌑';
+      if (phaseFraction < 0.04 || phaseFraction >= 0.96) {
+        name = 'Молодик'; emoji = '🌑';
+      } else if (phaseFraction < 0.22) {
+        name = 'Молодий місяць'; emoji = '🌒';
+      } else if (phaseFraction < 0.28) {
+        name = 'Перша чверть'; emoji = '🌓';
+      } else if (phaseFraction < 0.47) {
+        name = 'Зростаючий місяць'; emoji = '🌔';
+      } else if (phaseFraction < 0.53) {
+        name = 'Повня'; emoji = '🌕';
+      } else if (phaseFraction < 0.72) {
+        name = 'Спадаючий місяць'; emoji = '🌖';
+      } else if (phaseFraction < 0.78) {
+        name = 'Остання чверть'; emoji = '🌗';
+      } else {
+        name = 'Старий місяць'; emoji = '🌘';
+      }
+      return { phaseFraction, name, emoji };
+    }
+
+    function renderWeekDays() {
+      const mon = getMondayOfWeek(state.weekOffset);
+      const sun = new Date(mon);
+      sun.setDate(mon.getDate() + 6);
+
+      const fmtShort = new Intl.DateTimeFormat(currentLang, { day: '2-digit', month: '2-digit' });
+      document.getElementById('weekRangeLabel').textContent = `${fmtShort.format(mon)} – ${fmtShort.format(sun)}`;
+
+      const selDate = getSelectedDateObj();
+      const moon = getMoonPhaseInfo(selDate);
+      const moonBadge = document.getElementById('selectedDateMoonBadge');
+      if (moonBadge) {
+        moonBadge.textContent = `${moon.emoji} ${moon.name}`;
+      }
+
+      const todayIso = formatIsoDate(new Date());
+      const grid = document.getElementById('weekDaysGrid');
+      const cards = [];
+
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(mon);
+        d.setDate(mon.getDate() + i);
+        const iso = formatIsoDate(d);
+        const isToday = iso === todayIso;
+        const count = state.tasks.filter(tItem => tItem.date === iso).length;
+        const selected = i === state.selectedDayIndex;
+        const wdName = new Intl.DateTimeFormat(currentLang, { weekday: 'short' }).format(d);
+        const mdName = new Intl.DateTimeFormat(currentLang, { day: '2-digit', month: '2-digit' }).format(d);
+
+        cards.push(`
+          <button type="button" onclick="selectDay(${i})" class="p-2.5 sm:p-3 rounded-2xl text-center transition border ${selected ? 'tiffany-pink-btn border-transparent' : isToday ? 'bg-teal-400/15 hover:bg-teal-400/25 border-teal-300/60 text-white ring-1 ring-teal-300/40' : 'bg-white/5 hover:bg-white/10 border-white/10 text-white'}">
+            <div class="text-[11px] sm:text-xs font-extrabold uppercase flex items-center justify-center gap-1">
+              <span>${wdName}</span>
+              ${isToday ? '<span class="w-1.5 h-1.5 rounded-full bg-teal-300 inline-block"></span>' : ''}
+            </div>
+            <div class="text-xs sm:text-sm font-bold mt-0.5">${mdName}</div>
+            <div class="text-[10px] sm:text-[11px] opacity-75 mt-1">${count}</div>
+          </button>
+        `);
+      }
+      grid.innerHTML = cards.join('');
+    }
+
+    function populateCountrySelects() {
+      const optionsHtml = COUNTRIES_TZ.map(c =>
+        `<option value="${c.id}">${c.flag} ${c.name}</option>`
+      ).join('');
+      document.getElementById('obCountrySelect').innerHTML = optionsHtml;
+      document.getElementById('u1CountrySelect').innerHTML = optionsHtml;
+      document.getElementById('u2CountrySelect').innerHTML = optionsHtml;
+      document.getElementById('u1CountrySelect').value = state.user1.countryId || 'ua';
+      document.getElementById('u2CountrySelect').value = state.user2.countryId || 'cy';
+    }
+
+    async function copyRoomCode() {
+      const t = getUiStrings();
+      const code = String(roomId || '').trim();
+      if (!code) return;
+      const ok = await copyTextReliable(code);
+      if (ok) {
+        showToast(`${t.codeCopiedToast} ${code}`);
+      } else {
+        openRoomModal();
+        const disp = document.getElementById('modalRoomCodeDisplay');
+        if (disp) {
+          disp.focus();
+          disp.select();
+        }
+        showToast(`🔑 ${code}`);
+      }
+    }
+
+    async function copyShareLink() {
+      const t = getUiStrings();
+      const url = buildShareUrl(roomId);
+      const ok = await copyTextReliable(url);
+      if (ok) {
+        showToast(t.linkCopiedToast);
+      } else {
+        openRoomModal();
+        showToast(`🔑 ${roomId}`);
+      }
+    }
+
+    function getRelativeDayLabelInTz(nowDate, tz) {
+      try {
+        const fmtDate = (d) => new Intl.DateTimeFormat('en-CA', {
+          timeZone: tz,
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit'
+        }).format(d);
+        const targetStr = fmtDate(nowDate);
+        const yestStr = fmtDate(new Date(nowDate.getTime() - 86400000));
+        const tomStr = fmtDate(new Date(nowDate.getTime() + 86400000));
+        const wd = new Intl.DateTimeFormat(currentLang || 'uk', {
+          timeZone: tz,
+          weekday: 'short',
+          day: '2-digit',
+          month: '2-digit'
+        }).format(nowDate);
+
+        if (targetStr === tomStr) return `${wd} • +1д`;
+        if (targetStr === yestStr) return `${wd} • -1д`;
+        return wd;
+      } catch (e) {
+        return '';
+      }
+    }
+
+    function getTzOffsetHoursLabel(tz) {
+      try {
+        const parts = new Intl.DateTimeFormat('en-US', {
+          timeZone: tz,
+          timeZoneName: 'shortOffset'
+        }).formatToParts(new Date());
+        const tzPart = parts.find(p => p.type === 'timeZoneName')?.value || 'UTC';
+        return tzPart;
+      } catch (e) {
+        return 'UTC';
+      }
+    }
+
+    function renderMemberCards() {
+      const now = new Date();
+      const c1 = COUNTRIES_TZ.find(c => c.id === state.user1.countryId) || COUNTRIES_TZ[0];
+      const c2 = COUNTRIES_TZ.find(c => c.id === state.user2.countryId) || COUNTRIES_TZ[1];
+
+      const u1Input = document.getElementById('u1NameInput');
+      if (u1Input && document.activeElement !== u1Input) {
+        u1Input.value = state.user1.name || '';
+      }
+      document.getElementById('u1Flag').textContent = c1.flag;
+      document.getElementById('u1CountryText').textContent = c1.name;
+      document.getElementById('u1LiveTime').textContent = formatZonedTime(now, c1.tz);
+      document.getElementById('u1DayOffset').textContent = getRelativeDayLabelInTz(now, c1.tz);
+      document.getElementById('u1DiffBadge').textContent = getTzOffsetHoursLabel(c1.tz);
+      document.getElementById('u1CountrySelect').value = c1.id;
+      document.getElementById('u1AvatarBox').innerHTML = state.user1.avatar
+        ? `<img src="${state.user1.avatar}" alt="K1" class="w-full h-full object-cover" />`
+        : `<span class="text-xl">👤</span>`;
+
+      const u2Input = document.getElementById('u2NameInput');
+      if (u2Input && document.activeElement !== u2Input) {
+        u2Input.value = state.user2.name || '';
+      }
+      document.getElementById('u2Flag').textContent = c2.flag;
+      document.getElementById('u2CountryText').textContent = c2.name;
+      document.getElementById('u2LiveTime').textContent = formatZonedTime(now, c2.tz);
+      document.getElementById('u2DayOffset').textContent = getRelativeDayLabelInTz(now, c2.tz);
+      document.getElementById('u2CountrySelect').value = c2.id;
+      document.getElementById('u2AvatarBox').innerHTML = state.user2.avatar
+        ? `<img src="${state.user2.avatar}" alt="K2" class="w-full h-full object-cover" />`
+        : `<span class="text-xl">👤</span>`;
+
+      const waitingBanner = document.getElementById('u2WaitingBanner');
+      if (waitingBanner) {
+        waitingBanner.classList.toggle('hidden', Boolean(state.user2.joined || state.user2.name));
+      }
+
+      const d1 = new Date(now.toLocaleString('en-US', { timeZone: c1.tz }));
+      const d2 = new Date(now.toLocaleString('en-US', { timeZone: c2.tz }));
+      const diffHours = Math.round((d2 - d1) / 3600000);
+      document.getElementById('u2DiffBadge').textContent = diffHours >= 0 ? `+${diffHours} год` : `${diffHours} год`;
+
+      const n1 = (state.user1.name || 'К1').trim() || 'К1';
+      const n2 = (state.user2.name || 'К2').trim() || 'К2';
+      document.getElementById('colHeader1').textContent = `К1 • ${n1}`;
+      document.getElementById('colHeader2').textContent = `К2 • ${n2}`;
+    }
+
+    function updateMemberName(memberIdx, val) {
+      const clean = String(val || '').trim();
+      if (memberIdx === 1) {
+        state.user1.name = clean;
+        state.user1.joined = Boolean(clean);
+      } else {
+        state.user2.name = clean;
+        state.user2.joined = Boolean(clean);
+      }
+      saveAndSyncState();
+      renderMemberCards();
+    }
+
+    function updateMemberCountry(memberIdx, countryId) {
+      if (memberIdx === 1) {
+        state.user1.countryId = countryId;
+      } else {
+        state.user2.countryId = countryId;
+      }
+      saveAndSyncState();
+      renderMemberCards();
+      renderSyncTimeline();
+    }
+
+    function readImageAsDataUrl(file, cb) {
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const size = 160;
+          canvas.width = size;
+          canvas.height = size;
+          const ctx = canvas.getContext('2d');
+          const minSide = Math.min(img.width, img.height);
+          const sx = (img.width - minSide) / 2;
+          const sy = (img.height - minSide) / 2;
+          ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, size, size);
+          cb(canvas.toDataURL('image/jpeg', 0.8));
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function handleOnboardingAvatar(ev) {
+      const file = ev.target.files && ev.target.files[0];
+      readImageAsDataUrl(file, (dataUrl) => {
+        onboardingAvatar = dataUrl;
+        document.getElementById('obAvatarPreview').innerHTML = `<img src="${dataUrl}" alt="Avatar" class="w-full h-full object-cover" />`;
+      });
+    }
+
+    function handleMemberAvatar(memberIdx, ev) {
+      const file = ev.target.files && ev.target.files[0];
+      readImageAsDataUrl(file, (dataUrl) => {
+        if (memberIdx === 1) {
+          state.user1.avatar = dataUrl;
+          state.user1.joined = true;
+        } else {
+          state.user2.avatar = dataUrl;
+          state.user2.joined = true;
+        }
+        saveAndSyncState();
+        renderMemberCards();
+      });
+    }
+
+    function normalizeTimeInput(raw) {
+      const cleaned = String(raw || '').replace(/[^\d:]/g, '');
+      let hhStr = '';
+      let mmStr = '';
+
+      if (cleaned.includes(':')) {
+        const parts = cleaned.split(':');
+        hhStr = parts[0].slice(0, 2);
+        mmStr = (parts[1] || '').slice(0, 2);
+      } else {
+        hhStr = cleaned.slice(0, 2);
+        mmStr = cleaned.slice(2, 4);
+      }
+
+      const formattedTyping = mmStr.length > 0 || cleaned.includes(':')
+        ? `${hhStr}:${mmStr}`
+        : hhStr;
+
+      const match = /^(\d{1,2}):(\d{2})$/.exec(`${hhStr.padStart(2, '0')}:${mmStr}`);
+      if (!match) {
+        return { valid: false, minutes: null, formatted: formattedTyping, reason: 'Введіть час у форматі ГГ:ХХ (наприклад, 09:30 або 18:00)' };
+      }
+
+      const h = parseInt(match[1], 10);
+      const m = parseInt(match[2], 10);
+
+      if (h < 0 || h > 24 || m < 0 || m > 59 || (h === 24 && m > 0)) {
+        return {
+          valid: false,
+          minutes: null,
+          formatted: `${String(Math.min(24, h)).padStart(2, '0')}:${String(Math.min(59, m)).padStart(2, '0')}`,
+          reason: 'Некоректний час: години від 00 до 24, хвилини від 00 до 59 (24:00 — кінець доби)'
+        };
+      }
+
+      return {
+        valid: true,
+        minutes: h * 60 + m,
+        formatted: `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`,
+        reason: ''
+      };
+    }
+
+    function formatDurationMinutes(mins) {
+      if (mins <= 0) return '';
+      const t = getUiStrings();
+      const h = Math.floor(mins / 60);
+      const m = mins % 60;
+      if (h > 0 && m > 0) return `${h} ${t.hoursShort} ${m} ${t.minsShort}`;
+      if (h > 0) return `${h} ${t.hoursShort}`;
+      return `${m} ${t.minsShort}`;
+    }
+
+    function validateTaskTimeRange(startRaw, endRaw) {
+      const s = normalizeTimeInput(startRaw);
+      const e = normalizeTimeInput(endRaw);
+      if (!s.valid) {
+        return { ok: false, error: `Початок: ${s.reason}`, startTime: s.formatted, endTime: e.formatted || endRaw };
+      }
+      if (!e.valid) {
+        return { ok: false, error: `Кінець: ${e.reason}`, startTime: s.formatted, endTime: e.formatted };
+      }
+      if (e.minutes <= s.minutes) {
+        return {
+          ok: false,
+          error: 'Час завершення має бути пізніше за час початку',
+          startTime: s.formatted,
+          endTime: e.formatted
+        };
+      }
+      return {
+        ok: true,
+        startTime: s.formatted,
+        endTime: e.formatted,
+        durationMin: e.minutes - s.minutes,
+        startHour: Math.min(23, Math.floor(s.minutes / 60))
+      };
+    }
+
+    function formatAndValidateTimeInputs() {
+      const startEl = document.getElementById('taskStartTimeInput');
+      const endEl = document.getElementById('taskEndTimeInput');
+      const badgeEl = document.getElementById('taskTimePreviewBadge');
+      const hintEl = document.getElementById('taskTimeValidationHint');
+      if (!startEl || !endEl) return;
+
+      const check = validateTaskTimeRange(startEl.value, endEl.value);
+      if (check.ok) {
+        if (hintEl) {
+          hintEl.textContent = '';
+          hintEl.classList.add('hidden');
+        }
+        if (badgeEl) {
+          badgeEl.textContent = `⏱ ${formatDurationMinutes(check.durationMin)}`;
+          badgeEl.className = 'px-3 py-2.5 rounded-2xl bg-teal-400/15 border border-teal-300/25 text-xs font-semibold text-teal-100 whitespace-nowrap';
+        }
+      } else {
+        if (badgeEl) {
+          badgeEl.textContent = getUiStrings().checkTime;
+          badgeEl.className = 'px-3 py-2.5 rounded-2xl bg-rose-500/15 border border-rose-300/30 text-xs font-semibold text-rose-200 whitespace-nowrap';
+        }
+      }
+      return check;
+    }
+
+    function toggleTaskOwner() {
+      state.taskOwner = state.taskOwner === 1 ? 2 : 1;
+      const btn = document.getElementById('taskOwnerToggleBtn');
+      if (state.taskOwner === 1) {
+        btn.textContent = 'К1';
+        btn.className = 'px-4 py-3 rounded-2xl text-xs sm:text-sm font-extrabold text-slate-950 bg-pink-300 hover:brightness-105 transition shrink-0';
+      } else {
+        btn.textContent = 'К2';
+        btn.className = 'px-4 py-3 rounded-2xl text-xs sm:text-sm font-extrabold text-slate-950 bg-teal-300 hover:brightness-105 transition shrink-0';
+      }
+    }
+
+    function handleAddTask(event) {
+      event.preventDefault();
+      const startEl = document.getElementById('taskStartTimeInput');
+      const endEl = document.getElementById('taskEndTimeInput');
+      const catVal = document.getElementById('taskCategorySelect').value || 'call';
+      const titleVal = (document.getElementById('taskTitleInput').value || '').trim();
+      const hintEl = document.getElementById('taskTimeValidationHint');
+
+      if (!titleVal) return;
+
+      const check = validateTaskTimeRange(startEl.value, endEl.value);
+      if (!check.ok) {
+        if (hintEl) {
+          hintEl.textContent = check.error;
+          hintEl.classList.remove('hidden');
+        }
+        showToast(`⚠️ ${check.error}`);
+        return;
+      }
+
+      if (hintEl) {
+        hintEl.textContent = '';
+        hintEl.classList.add('hidden');
+      }
+
+      startEl.value = check.startTime;
+      endEl.value = check.endTime;
+
+      const isoDate = formatIsoDate(getSelectedDateObj());
+      state.tasks.push({
+        id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        owner: state.taskOwner,
+        date: isoDate,
+        startTime: check.startTime,
+        endTime: check.endTime,
+        time: check.startTime,
+        category: catVal,
+        title: titleVal
+      });
+
+      document.getElementById('taskTitleInput').value = '';
+      formatAndValidateTimeInputs();
+      saveAndSyncState();
+      renderWeekDays();
+      renderSyncTimeline();
+      showToast(getUiStrings().addedToast);
+    }
+
+    function deleteTask(taskId) {
+      state.tasks = state.tasks.filter(tItem => tItem.id !== taskId);
+      saveAndSyncState();
+      renderWeekDays();
+      renderSyncTimeline();
+    }
+
+    function convertTimeBetweenTzs(dateObj, hhmm, fromTz, toTz) {
+      try {
+        const [hh, mm] = String(hhmm || '00:00').split(':').map(n => parseInt(n, 10) || 0);
+        const y = dateObj.getFullYear();
+        const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const d = String(dateObj.getDate()).padStart(2, '0');
+        const approxUtc = new Date(`${y}-${m}-${d}T${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:00Z`);
+        const fromFmt = new Intl.DateTimeFormat('en-CA', {
+          timeZone: fromTz,
+          year: 'numeric', month: '2-digit', day: '2-digit',
+          hour: '2-digit', minute: '2-digit', hour12: false
+        }).formatToParts(approxUtc);
+        const getP = (parts, type) => parts.find(p => p.type === type)?.value || '00';
+        const fStr = `${getP(fromFmt, 'year')}-${getP(fromFmt, 'month')}-${getP(fromFmt, 'day')}T${getP(fromFmt, 'hour')}:${getP(fromFmt, 'minute')}:00Z`;
+        const desiredStr = `${y}-${m}-${d}T${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:00Z`;
+        const deltaMs = new Date(desiredStr) - new Date(fStr);
+        const realInstant = new Date(approxUtc.getTime() + deltaMs);
+
+        return new Intl.DateTimeFormat(currentLang || 'uk', {
+          timeZone: toTz,
+          hour: '2-digit',
+          minute: '2-digit'
+        }).format(realInstant);
+      } catch (e) {
+        return hhmm;
+      }
+    }
+
+    function renderSyncTimeline() {
+      const container = document.getElementById('syncTimelineRows');
+      if (!container) return;
+
+      const selectedDate = getSelectedDateObj();
+      const isoDate = formatIsoDate(selectedDate);
+      const dayTasks = state.tasks.filter(tItem => tItem.date === isoDate);
+
+      const c1 = COUNTRIES_TZ.find(c => c.id === state.user1.countryId) || COUNTRIES_TZ[0];
+      const c2 = COUNTRIES_TZ.find(c => c.id === state.user2.countryId) || COUNTRIES_TZ[1];
+
+      const catIcons = {
+        call: '📞',
+        video: '🎥',
+        date: '💖',
+        study: '📚',
+        work: '💼',
+        sport: '🏋️',
+        game: '🎮',
+        travel: '✈️',
+        food: '🍽️',
+        rest: '🌿',
+        sleep: '🌙'
+      };
+      const currentHourNow = new Date().getHours();
+      const totalDayMinutes = 24 * 60;
+      const pxPerMinute = 1.1;
+      const timelineHeightPx = Math.round(totalDayMinutes * pxPerMinute);
+      const startOfTimelineMin = currentHourNow * 60;
+
+      const getOffsetMinutesFromStart = (minsOfDay) => ((minsOfDay - startOfTimelineMin) % totalDayMinutes + totalDayMinutes) % totalDayMinutes;
+
+      const buildProportionalBlocks = (ownerNum, fromTz, toTz, accentClass) => {
+        const ownerTasks = dayTasks.filter(tItem => tItem.owner === ownerNum);
+        const rawSegments = [];
+
+        for (const item of ownerTasks) {
+          const startStr = item.startTime || item.time || '00:00';
+          const endStr = item.endTime || '';
+          const sNorm = normalizeTimeInput(startStr);
+          const eNorm = endStr ? normalizeTimeInput(endStr) : null;
+
+          const startMin = sNorm.valid ? sNorm.minutes : 0;
+          const endMin = (eNorm && eNorm.valid && eNorm.minutes > startMin)
+            ? eNorm.minutes
+            : Math.min(totalDayMinutes, startMin + 60);
+
+          const durationMin = Math.max(10, endMin - startMin);
+          const offsetStart = getOffsetMinutesFromStart(startMin);
+
+          const mirrorStart = convertTimeBetweenTzs(selectedDate, startStr, fromTz, toTz);
+          const mirrorEnd = endStr ? convertTimeBetweenTzs(selectedDate, endStr, fromTz, toTz) : '';
+          const localRange = endStr ? `${startStr}–${endStr}` : startStr;
+          const mirrorRange = endStr ? `${mirrorStart}–${mirrorEnd}` : mirrorStart;
+          const durText = (sNorm.valid && eNorm && eNorm.valid && eNorm.minutes > sNorm.minutes)
+            ? formatDurationMinutes(eNorm.minutes - sNorm.minutes)
+            : '';
+
+          if (offsetStart + durationMin <= totalDayMinutes) {
+            rawSegments.push({
+              item,
+              topMin: offsetStart,
+              bottomMin: offsetStart + durationMin,
+              durationMin,
+              localRange,
+              mirrorRange,
+              durText,
+              accentClass
+            });
+          } else {
+            const firstPart = totalDayMinutes - offsetStart;
+            const secondPart = durationMin - firstPart;
+            if (firstPart > 0) {
+              rawSegments.push({
+                item,
+                topMin: offsetStart,
+                bottomMin: totalDayMinutes,
+                durationMin: firstPart,
+                localRange,
+                mirrorRange,
+                durText,
+                accentClass
+              });
+            }
+            if (secondPart > 0) {
+              rawSegments.push({
+                item,
+                topMin: 0,
+                bottomMin: secondPart,
+                durationMin: secondPart,
+                localRange,
+                mirrorRange,
+                durText,
+                accentClass
+              });
+            }
+          }
+        }
+
+        rawSegments.sort((a, b) => (a.topMin - b.topMin) || (b.durationMin - a.durationMin));
+        const lanesEnd = [];
+        for (const seg of rawSegments) {
+          let laneIdx = lanesEnd.findIndex(endM => endM <= seg.topMin);
+          if (laneIdx === -1) {
+            laneIdx = lanesEnd.length;
+            lanesEnd.push(seg.bottomMin);
+          } else {
+            lanesEnd[laneIdx] = seg.bottomMin;
+          }
+          seg.laneIdx = laneIdx;
+        }
+
+        for (const seg of rawSegments) {
+          let maxLanes = 1;
+          for (const other of rawSegments) {
+            const overlaps = seg.topMin < other.bottomMin && seg.bottomMin > other.topMin;
+            if (overlaps) {
+              maxLanes = Math.max(maxLanes, other.laneIdx + 1);
+            }
+          }
+          seg.totalLanes = maxLanes;
+        }
+
+        return rawSegments;
+      };
+
+      const blocksU1 = buildProportionalBlocks(
+        1,
+        c1.tz,
+        c2.tz,
+        'bg-gradient-to-br from-pink-400/35 to-pink-500/20 border border-pink-300/50 text-pink-50 shadow-md'
+      );
+      const blocksU2 = buildProportionalBlocks(
+        2,
+        c2.tz,
+        c1.tz,
+        'bg-gradient-to-br from-teal-300/35 to-teal-500/20 border border-teal-200/50 text-teal-50 shadow-md'
+      );
+
+      const nextDayDate = new Date(selectedDate);
+      nextDayDate.setDate(selectedDate.getDate() + 1);
+      const nextDayBadge = new Intl.DateTimeFormat(currentLang || 'uk', {
+        weekday: 'short',
+        day: '2-digit',
+        month: '2-digit'
+      }).format(nextDayDate);
+
+      const hourTicksHtml = [];
+      for (let step = 0; step < 24; step++) {
+        const h = (currentHourNow + step) % 24;
+        const isCurrentHour = step === 0;
+        const isMidnightBoundary = h === 0 && step > 0;
+        const hourLabel = `${String(h).padStart(2, '0')}:00`;
+        const topPx = Math.round(step * 60 * pxPerMinute);
+        const heightPx = Math.round(60 * pxPerMinute);
+        const halfHourTopPx = Math.round((step * 60 + 30) * pxPerMinute);
+
+        hourTicksHtml.push(`
+          <div
+            style="top: ${topPx}px; height: ${heightPx}px;"
+            class="absolute inset-x-0 pointer-events-none border-b border-white/10 ${isCurrentHour ? 'bg-teal-400/10 rounded-xl border border-teal-300/25' : ''} ${isMidnightBoundary ? 'border-t-2 border-t-amber-300/80 bg-amber-300/[0.04]' : ''}"
+          >
+            <div class="w-[68px] px-1.5 py-1.5 text-xs font-bold tabular-nums leading-tight ${isCurrentHour ? 'text-teal-300 font-extrabold' : isMidnightBoundary ? 'text-amber-300 font-extrabold' : 'text-white/55'}">
+              <div>${hourLabel}</div>
+              ${isCurrentHour ? '<div class="text-[9px] uppercase tracking-wider text-pink-300">● NOW</div>' : ''}
+              ${isMidnightBoundary ? `<div class="text-[9px] uppercase tracking-wider text-amber-300 leading-tight mt-0.5">🌙 +1д<br/>${nextDayBadge}</div>` : ''}
+            </div>
+          </div>
+          <div
+            style="top: ${halfHourTopPx}px;"
+            class="absolute left-[68px] right-0 pointer-events-none border-b border-dashed border-white/[0.05]"
+          ></div>
+        `);
+      }
+
+      const renderProportionalColumnBlocks = (blocks) => {
+        return blocks.map((blk) => {
+          const topPx = Math.round(blk.topMin * pxPerMinute) + 1;
+          const heightPx = Math.max(22, Math.round(blk.durationMin * pxPerMinute) - 2);
+          const widthPct = 100 / blk.totalLanes;
+          const leftPct = blk.laneIdx * widthPct;
+          const isCompact = heightPx < 42;
+          const isTall = heightPx >= 90;
+
+          return `
+            <div
+              style="top: ${topPx}px; height: ${heightPx}px; left: calc(${leftPct}% + 2px); width: calc(${widthPct}% - 4px);"
+              title="${blk.localRange} (${blk.mirrorRange}) — ${blk.item.title}"
+              class="absolute z-10 ${blk.accentClass} ${isCompact ? 'px-2 py-0.5 rounded-lg' : isTall ? 'p-3 rounded-2xl' : 'px-2.5 py-1.5 rounded-xl'} flex flex-col justify-between transition hover:brightness-110 hover:z-20 overflow-hidden"
+            >
+              <div class="flex items-start justify-between gap-1.5 w-full min-w-0">
+                <div class="min-w-0 flex-1">
+                  ${isCompact ? `
+                    <div class="flex items-center gap-1.5 text-[11px] leading-tight truncate">
+                      <span class="font-extrabold shrink-0">${catIcons[blk.item.category] || '•'} ${blk.localRange}</span>
+                      <span class="font-semibold truncate">${blk.item.title}</span>
+                    </div>
+                  ` : `
+                    <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] sm:text-xs leading-tight">
+                      <span class="font-extrabold">${catIcons[blk.item.category] || '•'} ${blk.localRange}</span>
+                      <span class="text-[10px] sm:text-[11px] opacity-80">(${blk.mirrorRange})</span>
+                    </div>
+                    <div class="${isTall ? 'mt-1.5 text-sm sm:text-base font-extrabold leading-snug' : 'mt-0.5 text-xs font-semibold leading-tight'} break-words line-clamp-3">${blk.item.title}</div>
+                  `}
+                </div>
+                <button type="button" onclick="deleteTask('${blk.item.id}')" class="opacity-65 hover:opacity-100 text-[11px] shrink-0 px-1 leading-none">✕</button>
+              </div>
+              ${isTall && blk.durText ? `
+                <div class="mt-1 pt-1 border-t border-white/15 flex items-center justify-between text-[11px] font-bold opacity-85">
+                  <span>⏱ ${blk.durText}</span>
+                  <span>${blk.localRange}</span>
+                </div>
+              ` : ''}
+            </div>
+          `;
+        }).join('');
+      };
+
+      const nowMinuteOfDay = new Date().getHours() * 60 + new Date().getMinutes();
+      const nowLineTopPx = Math.round(getOffsetMinutesFromStart(nowMinuteOfDay) * pxPerMinute);
+
+      container.className = 'max-h-[640px] overflow-y-auto pr-1';
+      container.style.gridTemplateRows = '';
+      container.innerHTML = `
+        <div class="relative w-full" style="height: ${timelineHeightPx}px;">
+          ${hourTicksHtml.join('')}
+          <div
+            style="top: ${nowLineTopPx}px;"
+            class="absolute left-[64px] right-0 z-20 pointer-events-none flex items-center"
+          >
+            <span class="w-2 h-2 rounded-full bg-pink-400 shadow-[0_0_8px_#f472b6] -ml-1"></span>
+            <div class="flex-1 h-[1.5px] bg-gradient-to-r from-pink-400 via-teal-300/80 to-transparent"></div>
+          </div>
+          <div class="absolute inset-y-0 left-[68px] right-0 grid grid-cols-2 gap-2 sm:gap-3">
+            <div class="relative h-full border-l border-white/10">
+              ${renderProportionalColumnBlocks(blocksU1)}
+            </div>
+            <div class="relative h-full border-l border-white/10">
+              ${renderProportionalColumnBlocks(blocksU2)}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderAll() {
+      document.getElementById('headerRoomCode').textContent = roomId || '----------';
+      renderMemberCards();
+      renderWeekDays();
+      renderSyncTimeline();
+    }
+
+    function saveStateLocal() {
+      if (!roomId) return;
+      try {
+        localStorage.setItem(`${STORAGE_KEY}_${roomId}`, JSON.stringify(state));
+        localStorage.setItem(SESSION_KEY, JSON.stringify({ roomId, myRole }));
+      } catch (e) {}
+    }
+
+    async function pushStateToServer() {
+      if (!roomId || !isLocalServerMode()) return;
+      try {
+        state.updatedAt = Date.now();
+        lastAppliedRemoteUpdatedAt = state.updatedAt;
+        await fetch('/api/room', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            roomId,
+            user1: state.user1,
+            user2: state.user2,
+            tasks: state.tasks,
+            updatedAt: state.updatedAt
+          })
+        });
+      } catch (e) {}
+    }
+
+    function saveAndSyncState() {
+      saveStateLocal();
+      pushStateToServer();
+    }
+
+    function applyRemotePayload(payload) {
+      if (!payload || typeof payload !== 'object') return;
+      if (payload.updatedAt && payload.updatedAt <= lastAppliedRemoteUpdatedAt) return;
+      if (payload.updatedAt) {
+        lastAppliedRemoteUpdatedAt = payload.updatedAt;
+        state.updatedAt = payload.updatedAt;
+      }
+      if (payload.user1) Object.assign(state.user1, payload.user1);
+      if (payload.user2) Object.assign(state.user2, payload.user2);
+      if (Array.isArray(payload.tasks)) state.tasks = payload.tasks;
+      saveStateLocal();
+      if (!document.getElementById('mainAppContainer').classList.contains('hidden')) {
+        renderAll();
+      }
+    }
+
+    function startRoomSync(code) {
+      if (localEventSource) {
+        localEventSource.close();
+        localEventSource = null;
+      }
+      clearInterval(localPollTimer);
+      if (!code || !isLocalServerMode()) return;
+
+      try {
+        localEventSource = new EventSource(`/api/events?room=${encodeURIComponent(code)}`);
+        localEventSource.onmessage = (ev) => {
+          try {
+            const data = JSON.parse(ev.data);
+            if (data && !data.empty) applyRemotePayload(data);
+          } catch (e) {}
+        };
+      } catch (e) {}
+
+      localPollTimer = setInterval(async () => {
+        try {
+          const resp = await fetch(`/api/room?room=${encodeURIComponent(code)}`);
+          if (resp.ok) {
+            const json = await resp.json();
+            if (json && json.exists && json.data) {
+              applyRemotePayload(json.data);
+            }
+          }
+        } catch (e) {}
+      }, 2500);
+    }
+
+    function setOnboardingMode(mode) {
+      onboardingMode = mode;
+      const isCreate = mode === 'create';
+      document.getElementById('tabCreateBtn').className = isCreate
+        ? 'py-2.5 px-3 rounded-xl text-xs sm:text-sm font-extrabold transition tiffany-pink-btn'
+        : 'py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold text-white/80 hover:text-white transition';
+      document.getElementById('tabJoinBtn').className = !isCreate
+        ? 'py-2.5 px-3 rounded-xl text-xs sm:text-sm font-extrabold transition tiffany-pink-btn'
+        : 'py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold text-white/80 hover:text-white transition';
+      document.getElementById('joinRoomCodeBox').classList.toggle('hidden', isCreate);
+      const t = getUiStrings();
+      document.getElementById('obSubmitBtn').textContent = isCreate ? t.submitCreate : t.submitJoin;
+    }
+
+    async function submitOnboarding() {
+      const nameVal = (document.getElementById('obNameInput').value || '').trim();
+      const countryVal = document.getElementById('obCountrySelect').value || 'ua';
+
+      if (onboardingMode === 'join') {
+        const codeVal = sanitizeRoomCode(document.getElementById('obRoomCodeInput').value);
+        if (codeVal.length < 4) {
+          showToast('⚠️ Введіть код кімнати');
+          return;
+        }
+        roomId = codeVal;
+        myRole = 2;
+
+        try {
+          const cached = localStorage.getItem(`${STORAGE_KEY}_${roomId}`);
+          if (cached) applyRemotePayload(JSON.parse(cached));
+          if (isLocalServerMode()) {
+            const resp = await fetch(`/api/room?room=${encodeURIComponent(roomId)}`);
+            if (resp.ok) {
+              const json = await resp.json();
+              if (json && json.exists && json.data) applyRemotePayload(json.data);
+            }
+          }
+        } catch (e) {}
+
+        state.user2.name = nameVal || 'К2';
+        state.user2.countryId = countryVal;
+        if (onboardingAvatar) state.user2.avatar = onboardingAvatar;
+        state.user2.joined = true;
+      } else {
+        roomId = generateRoomCode();
+        myRole = 1;
+        state.user1.name = nameVal || 'К1';
+        state.user1.countryId = countryVal;
+        if (onboardingAvatar) state.user1.avatar = onboardingAvatar;
+        state.user1.joined = true;
+        state.user2 = { name: '', countryId: countryVal === 'cy' ? 'ua' : 'cy', avatar: '', joined: false };
+        state.tasks = [];
+      }
+
+      state.weekOffset = 0;
+      state.selectedDayIndex = getCurrentDayIndexInCurrentWeek();
+
+      document.getElementById('onboardingOverlay').classList.add('hidden');
+      document.getElementById('mainAppContainer').classList.remove('hidden');
+
+      saveAndSyncState();
+      startRoomSync(roomId);
+      renderAll();
+    }
+
+    function leaveCurrentRoom() {
+      if (localEventSource) {
+        localEventSource.close();
+        localEventSource = null;
+      }
+      clearInterval(localPollTimer);
+      try {
+        localStorage.removeItem(SESSION_KEY);
+      } catch (e) {}
+      roomId = '';
+      document.getElementById('mainAppContainer').classList.add('hidden');
+      document.getElementById('onboardingOverlay').classList.remove('hidden');
+    }
+
+    function startPanoramicLoop() {
+      const canvas = document.getElementById('panoramicCanvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+
+      const stars = Array.from({ length: 70 }, (_, idx) => ({
+        x: ((idx * 97) % 1000) / 1000,
+        y: ((idx * 53) % 450) / 1000,
+        r: (idx % 3 === 0) ? 1.5 : 1.0,
+        phase: idx * 0.7
+      }));
+
+      const fireflies = Array.from({ length: 24 }, (_, idx) => ({
+        x: ((idx * 137) % 1000) / 1000,
+        y: 0.58 + (((idx * 71) % 320) / 1000),
+        speed: 0.00025 + (idx % 5) * 0.00006,
+        phase: idx * 1.1
+      }));
+
+      const clouds = Array.from({ length: 9 }, (_, idx) => ({
+        x: (idx * 0.14) % 1.2 - 0.1,
+        y: 0.14 + (idx % 4) * 0.075,
+        scale: 0.72 + (idx % 3) * 0.28,
+        speed: 0.000012 + (idx % 3) * 0.000006,
+        layer: idx % 2
+      }));
+
+      function lerpChannel(a, b, t) {
+        return Math.round(a + (b - a) * t);
+      }
+
+      function lerpRgb(c1, c2, t) {
+        return [
+          lerpChannel(c1[0], c2[0], t),
+          lerpChannel(c1[1], c2[1], t),
+          lerpChannel(c1[2], c2[2], t)
+        ];
+      }
+
+      function rgbCss(c, alpha = 1) {
+        return alpha < 1
+          ? `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${alpha})`
+          : `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
+      }
+
+      function getSmoothSkyPalette(hour) {
+        const stops = [
+          { h: 0.0, top: [4, 15, 20], mid: [9, 34, 42], bot: [16, 52, 59], cloud: [28, 66, 74], cloudAlpha: 0.22, night: 1.0, dawnPink: 0.0 },
+          { h: 4.5, top: [9, 24, 34], mid: [34, 42, 66], bot: [88, 62, 86], cloud: [148, 102, 128], cloudAlpha: 0.35, night: 0.85, dawnPink: 0.35 },
+          { h: 6.2, top: [36, 52, 82], mid: [176, 98, 138], bot: [251, 168, 184], cloud: [255, 206, 218], cloudAlpha: 0.62, night: 0.25, dawnPink: 1.0 },
+          { h: 8.0, top: [26, 86, 106], mid: [118, 156, 174], bot: [248, 194, 198], cloud: [255, 232, 236], cloudAlpha: 0.68, night: 0.0, dawnPink: 0.65 },
+          { h: 12.0, top: [14, 74, 92], mid: [48, 132, 146], bot: [164, 218, 214], cloud: [248, 253, 253], cloudAlpha: 0.72, night: 0.0, dawnPink: 0.0 },
+          { h: 16.5, top: [18, 76, 94], mid: [66, 134, 144], bot: [212, 210, 190], cloud: [252, 246, 236], cloudAlpha: 0.68, night: 0.0, dawnPink: 0.1 },
+          { h: 18.3, top: [34, 48, 76], mid: [168, 92, 124], bot: [246, 156, 142], cloud: [254, 196, 182], cloudAlpha: 0.62, night: 0.3, dawnPink: 0.75 },
+          { h: 20.2, top: [8, 22, 32], mid: [24, 44, 62], bot: [56, 62, 82], cloud: [74, 92, 112], cloudAlpha: 0.34, night: 0.85, dawnPink: 0.15 },
+          { h: 24.0, top: [4, 15, 20], mid: [9, 34, 42], bot: [16, 52, 59], cloud: [28, 66, 74], cloudAlpha: 0.22, night: 1.0, dawnPink: 0.0 }
+        ];
+
+        const hNorm = ((hour % 24) + 24) % 24;
+        for (let i = 0; i < stops.length - 1; i++) {
+          const s1 = stops[i];
+          const s2 = stops[i + 1];
+          if (hNorm >= s1.h && hNorm <= s2.h) {
+            const rawT = (hNorm - s1.h) / Math.max(0.0001, s2.h - s1.h);
+            const t = rawT * rawT * (3 - 2 * rawT);
+            return {
+              top: lerpRgb(s1.top, s2.top, t),
+              mid: lerpRgb(s1.mid, s2.mid, t),
+              bot: lerpRgb(s1.bot, s2.bot, t),
+              cloud: lerpRgb(s1.cloud, s2.cloud, t),
+              cloudAlpha: s1.cloudAlpha + (s2.cloudAlpha - s1.cloudAlpha) * t,
+              night: s1.night + (s2.night - s1.night) * t,
+              dawnPink: s1.dawnPink + (s2.dawnPink - s1.dawnPink) * t
+            };
+          }
+        }
+        return stops[0];
+      }
+
+      function drawSoftCloud(cx, cy, scale, colorRgb, alpha) {
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.scale(scale, scale);
+
+        const puffs = [
+          { x: 0, y: 0, r: 34 },
+          { x: -30, y: 6, r: 26 },
+          { x: 32, y: 5, r: 28 },
+          { x: -54, y: 12, r: 19 },
+          { x: 56, y: 11, r: 20 },
+          { x: 12, y: -10, r: 24 }
+        ];
+
+        const grad = ctx.createLinearGradient(0, -34, 0, 26);
+        grad.addColorStop(0, rgbCss(colorRgb, alpha));
+        grad.addColorStop(1, rgbCss(colorRgb, alpha * 0.25));
+        ctx.fillStyle = grad;
+
+        ctx.beginPath();
+        for (const p of puffs) {
+          ctx.moveTo(p.x + p.r, p.y);
+          ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        }
+        ctx.fill();
+        ctx.restore();
+      }
+
+      function drawDetailedMoon(x, y, radius, phaseFraction, nightStrength, horizonFade) {
+        if (horizonFade <= 0.01) return;
+        ctx.save();
+        ctx.globalAlpha = horizonFade;
+
+        const glow = ctx.createRadialGradient(x, y, radius * 0.3, x, y, radius * 3.4);
+        glow.addColorStop(0, `rgba(255, 255, 255, ${0.42 * (0.45 + 0.55 * nightStrength)})`);
+        glow.addColorStop(0.45, `rgba(224, 247, 250, ${0.22 * (0.45 + 0.55 * nightStrength)})`);
+        glow.addColorStop(1, 'rgba(224, 247, 250, 0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(x, y, radius * 3.4, 0, Math.PI * 2);
+        ctx.fill();
+
+        const diskGrad = ctx.createRadialGradient(
+          x - radius * 0.28,
+          y - radius * 0.28,
+          radius * 0.08,
+          x,
+          y,
+          radius
+        );
+        diskGrad.addColorStop(0, '#ffffff');
+        diskGrad.addColorStop(0.65, '#f1f5f9');
+        diskGrad.addColorStop(1, '#cbd5e1');
+
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.fillStyle = diskGrad;
+        ctx.fill();
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.clip();
+
+        ctx.fillStyle = 'rgba(148, 163, 184, 0.24)';
+        ctx.beginPath();
+        ctx.ellipse(x - radius * 0.28, y - radius * 0.15, radius * 0.34, radius * 0.22, -0.3, 0, Math.PI * 2);
+        ctx.ellipse(x + radius * 0.18, y + radius * 0.22, radius * 0.28, radius * 0.18, 0.4, 0, Math.PI * 2);
+        ctx.fill();
+
+        const craters = [
+          { dx: -0.15, dy: -0.35, r: 0.11 },
+          { dx: 0.25, dy: -0.2, r: 0.08 },
+          { dx: -0.05, dy: 0.12, r: 0.13 },
+          { dx: 0.32, dy: 0.28, r: 0.07 },
+          { dx: -0.35, dy: 0.25, r: 0.09 }
+        ];
+        for (const c of craters) {
+          ctx.fillStyle = 'rgba(100, 116, 139, 0.22)';
+          ctx.beginPath();
+          ctx.arc(x + c.dx * radius, y + c.dy * radius, c.r * radius, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        const illumination = 0.5 - 0.5 * Math.cos(phaseFraction * Math.PI * 2);
+        const waxing = phaseFraction <= 0.5;
+        const shadowOffset = (illumination * 2 - 1) * radius;
+
+        ctx.fillStyle = 'rgba(15, 32, 42, 0.54)';
+        ctx.beginPath();
+        if (waxing) {
+          ctx.arc(x, y, radius, -Math.PI / 2, Math.PI / 2, false);
+          ctx.ellipse(x, y, Math.abs(shadowOffset), radius, 0, Math.PI / 2, -Math.PI / 2, shadowOffset < 0);
+        } else {
+          ctx.arc(x, y, radius, Math.PI / 2, -Math.PI / 2, false);
+          ctx.ellipse(x, y, Math.abs(shadowOffset), radius, 0, -Math.PI / 2, Math.PI / 2, shadowOffset > 0);
+        }
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.restore();
+        ctx.restore();
+      }
+
+      function renderFrame(nowMs) {
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        if (canvas.width !== w || canvas.height !== h) {
+          canvas.width = w;
+          canvas.height = h;
+        }
+
+        const nowDate = new Date();
+        const isOnboardingVisible = !document.getElementById('onboardingOverlay').classList.contains('hidden');
+        const hourOfDay = isOnboardingVisible
+          ? ((nowMs * 0.00045) % 24)
+          : (nowDate.getHours() + nowDate.getMinutes() / 60 + nowDate.getSeconds() / 3600);
+
+        const pal = getSmoothSkyPalette(hourOfDay);
+        const smoothNight = pal.night;
+
+        const skyGrad = ctx.createLinearGradient(0, 0, 0, h * 0.78);
+        skyGrad.addColorStop(0, rgbCss(pal.top));
+        skyGrad.addColorStop(0.52, rgbCss(pal.mid));
+        skyGrad.addColorStop(1, rgbCss(pal.bot));
+        ctx.fillStyle = skyGrad;
+        ctx.fillRect(0, 0, w, h);
+
+        if (pal.dawnPink > 0.02) {
+          const dawnGlow = ctx.createRadialGradient(w * 0.22, h * 0.66, 10, w * 0.22, h * 0.66, w * 0.55);
+          dawnGlow.addColorStop(0, `rgba(255, 178, 206, ${0.38 * pal.dawnPink})`);
+          dawnGlow.addColorStop(0.55, `rgba(244, 114, 182, ${0.16 * pal.dawnPink})`);
+          dawnGlow.addColorStop(1, 'rgba(244, 114, 182, 0)');
+          ctx.fillStyle = dawnGlow;
+          ctx.fillRect(0, 0, w, h);
+        }
+
+        if (smoothNight > 0.12) {
+          for (const st of stars) {
+            const twinkle = 0.5 + 0.5 * Math.sin(nowMs * 0.002 + st.phase);
+            ctx.fillStyle = `rgba(255, 255, 255, ${smoothNight * twinkle * 0.88})`;
+            ctx.beginPath();
+            ctx.arc(st.x * w, st.y * h * 0.65, st.r, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+
+        for (const cl of clouds) {
+          if (cl.layer !== 0) continue;
+          const cx = (((cl.x + nowMs * cl.speed) % 1.3) - 0.15) * w;
+          const cy = cl.y * h;
+          drawSoftCloud(cx, cy, cl.scale * 0.88, pal.cloud, pal.cloudAlpha * 0.65);
+        }
+
+        const sunAngle = ((hourOfDay - 6) / 24) * Math.PI * 2;
+        const sunAlt = Math.sin(sunAngle);
+        const sunX = w * 0.5 - Math.cos(sunAngle) * (w * 0.42);
+        const sunY = h * 0.72 - sunAlt * (h * 0.54);
+        const sunHorizonFade = Math.min(1, Math.max(0, (sunAlt + 0.22) / 0.25));
+
+        if (sunHorizonFade > 0.01) {
+          ctx.save();
+          ctx.globalAlpha = sunHorizonFade;
+          const sunRadius = Math.max(20, Math.min(w, h) * 0.036);
+          const sunGlow = ctx.createRadialGradient(sunX, sunY, sunRadius * 0.2, sunX, sunY, sunRadius * 3.5);
+          sunGlow.addColorStop(0, 'rgba(254, 249, 195, 0.98)');
+          sunGlow.addColorStop(0.38, 'rgba(253, 186, 116, 0.42)');
+          sunGlow.addColorStop(1, 'rgba(251, 146, 60, 0)');
+          ctx.fillStyle = sunGlow;
+          ctx.beginPath();
+          ctx.arc(sunX, sunY, sunRadius * 3.5, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = '#fef9c3';
+          ctx.beginPath();
+          ctx.arc(sunX, sunY, sunRadius, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+
+        const moonAngle = sunAngle + Math.PI;
+        const moonAlt = Math.sin(moonAngle);
+        const moonX = w * 0.5 - Math.cos(moonAngle) * (w * 0.42);
+        const moonY = h * 0.72 - moonAlt * (h * 0.54);
+        const moonHorizonFade = Math.min(1, Math.max(0, (moonAlt + 0.22) / 0.25));
+        const moonDate = isOnboardingVisible ? new Date() : getSelectedDateObj();
+        const moonPhase = getMoonPhaseInfo(moonDate).phaseFraction;
+        const moonRadius = Math.max(19, Math.min(w, h) * 0.034);
+        drawDetailedMoon(moonX, moonY, moonRadius, moonPhase, smoothNight, moonHorizonFade);
+
+        for (const cl of clouds) {
+          if (cl.layer !== 1) continue;
+          const cx = (((cl.x + nowMs * cl.speed * 1.35) % 1.3) - 0.15) * w;
+          const cy = cl.y * h;
+          drawSoftCloud(cx, cy, cl.scale, pal.cloud, pal.cloudAlpha);
+        }
+
+        const drawMountainRidge = (baseY, amp, freq, color, treeCount) => {
+          ctx.save();
+          ctx.beginPath();
+          ctx.moveTo(-40, h + 40);
+          for (let x = -40; x <= w + 40; x += 24) {
+            const y = baseY - Math.sin(x * freq + 0.6) * amp - Math.cos(x * freq * 0.5) * (amp * 0.45);
+            ctx.lineTo(x, y);
+          }
+          ctx.lineTo(w + 40, h + 40);
+          ctx.closePath();
+          ctx.fillStyle = color;
+          ctx.fill();
+
+          const step = Math.max(24, (w + 80) / treeCount);
+          for (let tx = -20; tx <= w + 20; tx += step) {
+            const ridgeY = baseY - Math.sin(tx * freq + 0.6) * amp - Math.cos(tx * freq * 0.5) * (amp * 0.45);
+            const th = 18 + ((Math.abs(Math.sin(tx * 0.13)) * 18) | 0);
+            const tw = th * 0.62;
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.moveTo(tx, ridgeY - th);
+            ctx.lineTo(tx - tw, ridgeY + 4);
+            ctx.lineTo(tx + tw, ridgeY + 4);
+            ctx.closePath();
+            ctx.fill();
+          }
+          ctx.restore();
+        };
+
+        const farColor = rgbCss(lerpRgb([22, 68, 76], [7, 29, 34], smoothNight));
+        const nearColor = rgbCss(lerpRgb([12, 44, 50], [4, 18, 22], smoothNight));
+        drawMountainRidge(h * 0.68, h * 0.08, 0.0045, farColor, 36);
+        drawMountainRidge(h * 0.79, h * 0.06, 0.007, nearColor, 48);
+
+        if (smoothNight > 0.55) {
+          const ffAlpha = Math.min(1, (smoothNight - 0.55) / 0.45);
+          for (const ff of fireflies) {
+            const fx = ((ff.x + Math.sin(nowMs * ff.speed + ff.phase) * 0.03) * w);
+            const fy = ((ff.y + Math.cos(nowMs * ff.speed * 1.3 + ff.phase) * 0.025) * h);
+            const pulse = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(nowMs * 0.005 + ff.phase * 2));
+            const rGlow = 10;
+
+            const fg = ctx.createRadialGradient(fx, fy, 0.5, fx, fy, rGlow);
+            fg.addColorStop(0, `rgba(253, 224, 71, ${ffAlpha * pulse})`);
+            fg.addColorStop(1, 'rgba(250, 204, 21, 0)');
+            ctx.fillStyle = fg;
+            ctx.beginPath();
+            ctx.arc(fx, fy, rGlow, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+
+        requestAnimationFrame(renderFrame);
+      }
+
+      requestAnimationFrame(renderFrame);
+    }
+
+    window.addEventListener('DOMContentLoaded', async () => {
+      try {
+        const savedLang = localStorage.getItem('sync_schedule_lang_v2');
+        if (savedLang) currentLang = savedLang;
+      } catch (e) {}
+
+      populateCountrySelects();
+      state.selectedDayIndex = getCurrentDayIndexInCurrentWeek();
+
+      let urlRoom = '';
+      try {
+        const params = new URLSearchParams(window.location.search);
+        urlRoom = sanitizeRoomCode(params.get('room'));
+      } catch (e) {}
+
+      if (urlRoom) {
+        setOnboardingMode('join');
+        document.getElementById('obRoomCodeInput').value = urlRoom;
+      } else {
+        try {
+          const rawSession = localStorage.getItem(SESSION_KEY);
+          if (rawSession) {
+            const sess = JSON.parse(rawSession);
+            if (sess && sess.roomId) {
+              roomId = sanitizeRoomCode(sess.roomId);
+              myRole = sess.myRole === 2 ? 2 : 1;
+              const cached = localStorage.getItem(`${STORAGE_KEY}_${roomId}`);
+              if (cached) applyRemotePayload(JSON.parse(cached));
+
+              if (isLocalServerMode()) {
+                const resp = await fetch(`/api/room?room=${encodeURIComponent(roomId)}`);
+                if (resp.ok) {
+                  const json = await resp.json();
+                  if (json && json.exists && json.data) applyRemotePayload(json.data);
+                }
+              }
+
+              document.getElementById('onboardingOverlay').classList.add('hidden');
+              document.getElementById('mainAppContainer').classList.remove('hidden');
+              startRoomSync(roomId);
+            }
+          }
+        } catch (e) {}
+      }
+
+      applyLanguage(currentLang, false);
+      formatAndValidateTimeInputs();
+      renderAll();
+      startPanoramicLoop();
+
+      let lastKnownIsoDay = formatIsoDate(new Date());
+      let lastKnownHour = new Date().getHours();
+
+      setInterval(() => {
+        const now = new Date();
+        const obClock = document.getElementById('obLiveClock');
+        if (obClock) {
+          obClock.textContent = now.toLocaleTimeString(currentLang || 'uk', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+          });
+        }
+
+        const currentIsoDay = formatIsoDate(now);
+        const currentHour = now.getHours();
+        const isMainVisible = !document.getElementById('mainAppContainer').classList.contains('hidden');
+
+        if (currentIsoDay !== lastKnownIsoDay) {
+          lastKnownIsoDay = currentIsoDay;
+          lastKnownHour = currentHour;
+          state.weekOffset = 0;
+          state.selectedDayIndex = getCurrentDayIndexInCurrentWeek();
+          saveStateLocal();
+          if (isMainVisible) {
+            setWeekOffset(0);
+            renderAll();
+          }
+          return;
+        }
+
+        if (currentHour !== lastKnownHour) {
+          lastKnownHour = currentHour;
+          if (isMainVisible) {
+            renderSyncTimeline();
+          }
+        }
+
+        if (isMainVisible) {
+          renderMemberCards();
+        }
+      }, 1000);
+    });
+  </script>
+</body>
+</html>
